@@ -1,0 +1,23 @@
+services:
+  corvus:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: corvus:latest
+    container_name: corvus
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    environment:
+      - CORVUS_PORT=8090
+      - CORVUS_DATA_DIR=/data
+      - DOCKER_SOCKET=/var/run/docker.sock
+      - CORVUS_AUTH_ENABLED=true
+    volumes:
+      # Read-only Docker socket mount for container status & metrics discovery
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Persistent SQLite database volume
+      - corvus-data:/data
+
+volumes:
+  corvus-data:

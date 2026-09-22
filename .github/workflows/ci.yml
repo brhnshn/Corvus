@@ -1,0 +1,86 @@
+name: CI / Test & Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  backend-test:
+    name: Backend .NET 9 Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore Dependencies
+        run: dotnet restore tests/Corvus.Api.Tests/Corvus.Api.Tests.csproj
+
+      - name: Build and Test
+        run: dotnet test tests/Corvus.Api.Tests/Corvus.Api.Tests.csproj --configuration Release --verbosity normal
+
+  frontend-build:
+    name: Frontend React Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: src/Corvus.Web/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: src/Corvus.Web
+        run: npm ci
+
+      - name: Build Frontend
+        working-directory: src/Corvus.Web
+        run: npm run build
+
+  docker-build:
+    name: Full Docker Native AOT Image Build
+    runs-on: ubuntu-latest
+    needs: [backend-test, frontend-build]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: corvus:ci-test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Trigger Server Deploy
+    needs: docker-build
+    # Fork'layanlarda veya PR'larda asla çalışmaz, sadece senin ana deponda çalışır:
+    if: github.repository == 'brhnshn/Corvus' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Deploy
+        run: |
+          curl -s -S -X POST "${{ secrets.DEPLOY_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.DEPLOY_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '${{ secrets.DEPLOY_PAYLOAD }}'
