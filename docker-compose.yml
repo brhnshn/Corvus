@@ -1,9 +1,6 @@
 services:
   corvus:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: corvus:latest
+    image: ghcr.io/brhnshn/corvus:latest
     container_name: corvus
     restart: unless-stopped
     ports:
