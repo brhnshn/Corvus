@@ -89,7 +89,12 @@ jobs:
     steps:
       - name: Trigger Deploy
         run: |
-          curl -s -S -X POST "${{ secrets.DEPLOY_URL }}" \
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${{ secrets.DEPLOY_URL }}" \
             -H "Authorization: Bearer ${{ secrets.DEPLOY_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '${{ secrets.DEPLOY_PAYLOAD }}'
+            -d '${{ secrets.DEPLOY_PAYLOAD }}')
+          echo "Deploy webhook triggered (HTTP status: $HTTP_STATUS)"
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 400 ]; then
+            echo "::error::Deploy webhook returned status $HTTP_STATUS"
+            exit 1
+          fi
