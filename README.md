@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Corvus.png" width="120" alt="Corvus Logo" />
+  <img src=".github/assets/logo.png" width="120" alt="Corvus Logo" />
 </p>
 
 <h1 align="center">Corvus</h1>
@@ -142,6 +142,18 @@ labels:
    ```bash
    dotnet test tests/Corvus.Api.Tests
    ```
+
+---
+
+## 📚 Architecture & Documentation
+
+In-depth technical architecture, research notes, and design guidelines are available in the [`docs/`](docs/) directory:
+
+- [System Architecture](docs/architecture.md) — Service flow, component relationships, and directory layout.
+- [Technical Specification](docs/specification.md) — Data schemas, background workers, and API contracts.
+- [Design System & UI Guidelines](docs/design-system.md) — UI theme tokens, palette, and layouts.
+- [Technology Research](docs/research.md) — Evaluation of Native AOT, Docker socket APIs, and SQLite WAL engine.
+- [Project Scope & Boundaries](docs/scope.md) — Core responsibilities and integration guidelines.
 
 ---
 
