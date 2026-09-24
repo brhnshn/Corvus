@@ -55,5 +55,11 @@ public static class DashboardEndpoints
             }
             return Results.Ok(new GenericApiResponse(true, "Ayarlar kaydedildi."));
         });
+
+        app.MapGet("/api/version", async (IUpdateCheckerService updateChecker, CancellationToken ct) =>
+        {
+            var info = await updateChecker.GetVersionInfoAsync(ct);
+            return Results.Ok(info);
+        });
     }
 }

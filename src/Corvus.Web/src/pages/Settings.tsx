@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../api/client';
-import { Save, Check, Key, Database, Shield, Lock, Bell, Send, CheckCircle2, AlertCircle } from 'lucide-react';
+import { api, type VersionInfo } from '../api/client';
+import { Save, Check, Key, Database, Shield, Lock, Bell, Send, CheckCircle2, AlertCircle, Sparkles, ExternalLink } from 'lucide-react';
 
 export const SettingsPage: React.FC = () => {
   const [settings, setSettings] = useState<Record<string, string>>({});
+  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [togglingReg, setTogglingReg] = useState(false);
@@ -14,6 +15,7 @@ export const SettingsPage: React.FC = () => {
 
   useEffect(() => {
     api.getSettings().then((data) => setSettings(data));
+    api.getVersion().then(setVersionInfo).catch(() => {});
   }, []);
 
   const handleToggleRegistration = async () => {
@@ -354,6 +356,50 @@ export const SettingsPage: React.FC = () => {
           <p className="text-xs text-[#9ca3af]">
             Kimlik doğrulama ortam değişkeni <code className="text-[#d4d4d8]">CORVUS_AUTH_ENABLED</code> ile tamamen devre dışı bırakılabilir (örn. Tailscale veya harici reverse proxy auth arkasında).
           </p>
+        </div>
+
+        {/* Dynamic Version & Update Checker Card */}
+        <div className="p-4 sm:p-6 rounded-xl bg-[#1a1d29] border border-[#2a2e3f] space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-[#e5e7eb]">
+              <Sparkles className="w-4 h-4 text-cyan-400" />
+              <h2>Sürüm ve Güncelleme Bilgisi</h2>
+            </div>
+            {versionInfo && (
+              <span className="font-mono text-xs px-2.5 py-1 rounded-md bg-[#0f1117] border border-[#2a2e3f] text-[#e5e7eb] font-semibold">
+                v{versionInfo.currentVersion}
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+            <div className="text-xs text-[#9ca3af]">
+              {versionInfo?.isUpdateAvailable ? (
+                <div className="flex items-center gap-2 text-emerald-400 font-medium">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span>Yeni bir sürüm yayınlandı: <strong>v{versionInfo.latestVersion}</strong></span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-[#9ca3af]">
+                  <CheckCircle2 className="w-4 h-4 text-[#22c55e]" />
+                  <span>Sisteminiz güncel. En son sürümü kullanıyorsunuz.</span>
+                </div>
+              )}
+            </div>
+
+            <a
+              href={versionInfo?.releaseUrl || "https://github.com/brhnshn/corvus/releases"}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#2a2e3f] bg-[#0f1117] text-xs font-medium text-[#d4d4d8] hover:text-white hover:border-[#d4d4d8] transition-colors self-start sm:self-auto"
+            >
+              <span>GitHub Sürümleri</span>
+              <ExternalLink className="w-3.5 h-3.5 text-[#9ca3af]" />
+            </a>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">

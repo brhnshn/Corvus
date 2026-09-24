@@ -230,5 +230,16 @@ export const api = {
   updateSettings: (settings: Record<string, string>) => fetchJson<{ success: boolean }>('/settings', {
     method: 'PUT',
     body: JSON.stringify(settings)
-  })
+  }),
+
+  // Version & Updates
+  getVersion: () => fetchJson<VersionInfo>('/version')
 };
+
+export interface VersionInfo {
+  currentVersion: string;
+  latestVersion: string;
+  isUpdateAvailable: boolean;
+  releaseUrl: string;
+}
+

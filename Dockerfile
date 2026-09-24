@@ -20,7 +20,8 @@ COPY src/Corvus.Api/ ./Corvus.Api/
 COPY --from=web-build /src/Corvus.Api/wwwroot/ ./Corvus.Api/wwwroot/
 
 WORKDIR /src/Corvus.Api
-RUN dotnet publish -c Release -r linux-x64 -o /app/publish
+ARG APP_VERSION=1.0.0
+RUN dotnet publish -c Release -r linux-x64 -o /app/publish -p:Version=${APP_VERSION}
 
 # Stage 3: Minimal Distroless/Deps Runtime Container (<30MB RAM target)
 FROM mcr.microsoft.com/dotnet/runtime-deps:9.0
@@ -28,9 +29,11 @@ WORKDIR /app
 COPY --from=api-build /app/publish ./
 RUN mkdir -p /data
 
+ARG APP_VERSION=1.0.0
 ENV CORVUS_PORT=8090 \
     CORVUS_DATA_DIR=/data \
-    DOCKER_SOCKET=/var/run/docker.sock
+    DOCKER_SOCKET=/var/run/docker.sock \
+    CORVUS_VERSION=${APP_VERSION}
 
 EXPOSE 8090
 VOLUME ["/data"]

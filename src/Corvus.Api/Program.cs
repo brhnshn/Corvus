@@ -34,6 +34,7 @@ builder.Services.AddSingleton<IDockerService, DockerService>();
 builder.Services.AddSingleton<IAuthService, AuthService>();
 builder.Services.AddSingleton<INotificationService, NotificationService>();
 builder.Services.AddSingleton<IEventBroadcaster, EventBroadcaster>();
+builder.Services.AddSingleton<IUpdateCheckerService, UpdateCheckerService>();
 
 // Arka Plan Servisleri
 builder.Services.AddHostedService<ContainerDiscoveryService>();

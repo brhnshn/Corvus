@@ -180,6 +180,8 @@ public record NotificationResult(
 [JsonSerializable(typeof(PublicServiceDto))]
 [JsonSerializable(typeof(PublicStatusPageDto))]
 [JsonSerializable(typeof(ServerEventDto))]
+[JsonSerializable(typeof(VersionInfoDto))]
+[JsonSerializable(typeof(GitHubReleaseDto))]
 [JsonSerializable(typeof(string))]
 public partial class CorvusJsonSerializerContext : JsonSerializerContext
 {

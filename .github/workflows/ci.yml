@@ -75,8 +75,10 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          push: ${{ github.repository == 'brhnshn/Corvus' && github.ref == 'refs/heads/main' }}
+          push: ${{ github.repository_owner == 'brhnshn' && github.ref == 'refs/heads/main' }}
           tags: ghcr.io/brhnshn/corvus:latest
+          build-args: |
+            APP_VERSION=1.0.0
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -84,7 +86,7 @@ jobs:
     name: Trigger Server Deploy
     needs: docker-build
     # Fork'layanlarda veya PR'larda asla çalışmaz, sadece senin ana deponda çalışır:
-    if: github.repository == 'brhnshn/Corvus' && github.ref == 'refs/heads/main'
+    if: github.repository_owner == 'brhnshn' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Deploy

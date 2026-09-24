@@ -11,6 +11,7 @@ import {
   X,
   Globe 
 } from 'lucide-react';
+import { api, type VersionInfo } from '../api/client';
 
 export type PageId = 'dashboard' | 'services' | 'containers' | 'metrics' | 'uptime' | 'settings';
 
@@ -31,6 +32,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen = false,
   onClose
 }) => {
+  const [versionInfo, setVersionInfo] = React.useState<VersionInfo | null>(null);
+
+  useEffect(() => {
+    api.getVersion().then(setVersionInfo).catch(() => {});
+  }, []);
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'services', label: 'Servisler', icon: Grid },
@@ -163,6 +169,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
         )}
+
+        {/* Dynamic Version & Update Footer */}
+        <div className="px-3.5 py-2.5 border-t border-[#2a2e3f] bg-[#0f1117]/30 flex items-center justify-between text-[11px] text-[#9ca3af]">
+          <a
+            href="https://github.com/brhnshn/corvus/releases"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 font-mono hover:text-[#e5e7eb] transition-colors"
+          >
+            <span>Corvus</span>
+            <span className="text-[#e5e7eb] font-semibold">
+              {versionInfo ? `v${versionInfo.currentVersion}` : '...'}
+            </span>
+          </a>
+
+          {versionInfo?.isUpdateAvailable ? (
+            <a
+              href={versionInfo.releaseUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`Yeni sürüm v${versionInfo.latestVersion} yayınlandı!`}
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/60 text-emerald-400 hover:bg-emerald-900 transition-colors text-[10px] font-medium"
+            >
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+              </span>
+              <span>v{versionInfo.latestVersion}</span>
+            </a>
+          ) : (
+            <span className="text-[10px] text-slate-500 font-mono">güncel</span>
+          )}
+        </div>
       </aside>
     </>
   );
