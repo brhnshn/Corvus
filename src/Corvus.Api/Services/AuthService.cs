@@ -17,6 +17,7 @@ public interface IAuthService
     string GenerateSessionToken(string username);
     (bool IsValid, string? Username) ValidateSessionToken(string? token);
     void InvalidateSessionToken(string? token);
+    string? CheckProxyAuthHeader(IHeaderDictionary headers);
 }
 
 public class AuthService : IAuthService
@@ -162,6 +163,26 @@ public class AuthService : IAuthService
         {
             ActiveSessions.TryRemove(token, out _);
         }
+    }
+
+    public string? CheckProxyAuthHeader(IHeaderDictionary headers)
+    {
+        string[] candidateHeaders = [
+            "Tailscale-User-Login",
+            "Cf-Access-Authenticated-User-Email",
+            "Remote-User",
+            "X-Forwarded-User"
+        ];
+
+        foreach (var h in candidateHeaders)
+        {
+            if (headers.TryGetValue(h, out var value) && !string.IsNullOrWhiteSpace(value))
+            {
+                return value.ToString().Trim();
+            }
+        }
+
+        return null;
     }
 
     private static string HashPassword(string password)

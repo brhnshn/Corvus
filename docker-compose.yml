@@ -11,8 +11,10 @@ services:
       - DOCKER_SOCKET=/var/run/docker.sock
       - CORVUS_AUTH_ENABLED=true
     volumes:
-      # Read-only Docker socket mount for container status & metrics discovery
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Docker socket mount:
+      # Use '/var/run/docker.sock:/var/run/docker.sock:ro' for read-only monitoring.
+      # Mount as read-write to enable container lifecycle controls (Start, Stop, Pause, Restart).
+      - /var/run/docker.sock:/var/run/docker.sock
       # Persistent SQLite database volume
       - corvus-data:/data
 

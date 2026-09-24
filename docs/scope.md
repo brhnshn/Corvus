@@ -2,7 +2,7 @@
 
 ## 1. Temel İlke
 
-Corvus, belirli bir kişinin veya kurulumun paneli değildir. Açık kaynak bir proje olarak **herhangi bir self-hosted sunucu için genel bir izleme + launcher paneli** olmalı. Geliştiricinin kendi sunucusu (Coolify + Caddy + Tailscale tabanlı kurulum) yalnızca ilk geliştirme/test senaryosudur — nihai ürün bu kuruluma bağımlı olmamalıdır.
+Corvus, belirli bir kişinin veya kurulumun paneli değildir. Açık kaynak bir proje olarak **herhangi bir self-hosted sunucu için genel bir izleme + launcher paneli**dir. Geliştiricinin kendi sunucusu (Coolify + Caddy + Tailscale tabanlı kurulum) yalnızca ilk geliştirme/test senaryosudur — ürün hiçbir sağlayıcıya bağımlı değildir.
 
 ---
 
@@ -10,43 +10,33 @@ Corvus, belirli bir kişinin veya kurulumun paneli değildir. Açık kaynak bir 
 
 ### A) Otomatik Keşif (varsayılan)
 - Docker socket'e bağlanıp sunucuda çalışan container'ları otomatik algılar
-- Herhangi bir reverse proxy'e (Caddy, Traefik, Nginx) veya orkestrasyon aracına (Coolify, Portainer) bağımlı değildir — sadece standart Docker API'sini kullanır
+- Herhangi bir reverse proxy'e (Caddy, Traefik, Nginx) veya orkestrasyon aracına (Coolify, Portainer) bağımlı değildir — standart Docker API'sini kullanır
 - Container bilgisi (isim, port, durum, kaynak kullanımı) otomatik çekilir
-- Opsiyonel: Docker label'ları üzerinden ek metadata (ikon, kategori, görünen isim) tanımlanabilir — ama label yoksa da container listelenir, sadece varsayılan görünümle
+- Docker label'ları (`corvus.name`, `corvus.category`, `corvus.url`, `corvus.healthcheck`, `corvus.icon`, `corvus.ignore`) üzerinden metadata zenginleştirilebilir
+- Docker Compose projelerine göre otomatik hiyerarşik gruplama (`com.docker.compose.project`) desteklenir
 
 ### B) Manuel Ekleme
 - Docker socket'in erişemediği servisler için (uzak sunucu, harici SaaS, IoT cihaz, farklı bir ağdaki servis)
-- Kullanıcı arayüzden URL, isim, ikon, kategori ve (opsiyonel) health-check endpoint'i girerek servis ekleyebilir
-- Bu mod, Homer'ın yaptığı "sadece link" işlevinin doğal devamı — otomatik keşif hiçbir zaman manuel ekleme ihtiyacını tamamen ortadan kaldırmaz
-
-### Neden ikisi birden gerekli
-- Tek sunucu + tek Docker host senaryosunda otomatik keşif yeterli
-- Çoklu sunucu, hibrit (bulut + ev sunucusu), veya Docker dışı servisler (bare-metal, harici API) için manuel ekleme şart
-- Açık kaynak kullanıcı kitlesi çok çeşitli kurulumlara sahip olacağı için ikisi de v1 kapsamında olmalı
+- Kullanıcı arayüzden URL/IP, isim, kategori, açıklama, kontrol türü (HTTP/HTTPS veya TCP Port Ping) ve halka açık durum sayfası görünürlüğü tanımlayabilir
+- Servisler arayüzden yukarı/aşağı butonlarıyla özel olarak sıralanabilir (`display_order`)
 
 ---
 
-## 3. Dışarıdan Bağımsız Olması Gereken Alanlar
+## 3. Dış Bağımsızlık ve Entegrasyon Çerçevesi
 
-| Alan | Kişisel kurulum (bağımlı olunmayacak) | Genel yaklaşım |
+| Alan | Kişisel kurulum | Corvus Genel Yaklaşımı |
 |---|---|---|
-| Reverse proxy | Caddy | Herhangi bir proxy ile çalışır, proxy'e özel entegrasyon yok |
-| Orkestrasyon | Coolify | Sadece Docker socket okur, Coolify şart değil |
-| Ağ/VPN | Tailscale | Ağ durumu widget'ı genel "bağlantı sağlığı" göstergesi, VPN aracına kilitlenmez |
-| Backup bildirimi | `/opt/scripts/backup.sh` | Genel bir push/webhook endpoint'i — herhangi bir script bu endpoint'e HTTP isteğiyle durum bildirebilir (Uptime Kuma push monitor mantığı) |
-| Auth | (henüz belirlenmedi) | Self-hosted herkese açık olacağı için genel bir auth katmanı (örn. basic auth / opsiyonel SSO) düşünülmeli, tek bir sağlayıcıya bağımlı olmamalı |
+| Reverse proxy | Caddy | Herhangi bir proxy ile çalışır. Ters vekil başlıkları (`Tailscale-User-Login`, `Cf-Access-Authenticated-User-Email`, `Remote-User`, `X-Forwarded-User`) üzerinden Zero-Trust SSO otomatik desteklenir. |
+| Orkestrasyon | Coolify / Portainer | Doğrudan standart Docker socket (`/var/run/docker.sock`) okur, harici araca bağımlı değildir. |
+| Ağ / VPN | Tailscale | Özel ağ gerektirmez; yerel ağ, WireGuard veya açık internet üzerinde eşit kararlılıkla çalışır. |
+| Backup / Cron Bildirimi | `/opt/scripts/backup.sh` | **Dead Man's Snitch** push altyapısı (`/api/push/{token}`). Beklenen periyot ve tolerans süresi aşıldığında otomatik alarm üretir. |
+| Alarm ve Bildirim | — | Çok kanallı yerleşik bildirim motoru: Discord, Telegram, Ntfy/Gotify ve Generic Webhook. |
+| Canlı İletişim | — | Server-Sent Events (SSE) ile `/api/stream/events` ve gerçek zamanlı konteyner log akışı (`/api/containers/{id}/logs/stream`). |
 
 ---
 
-## 4. UI/Tasarım Yansıması
+## 4. UI ve Tasarım İlkeleri
 
-- Servis kartları, kategoriler, container listesi kullanıcının kendi eklediği/algılanan veriye göre dinamik olmalı
-- Tasarım mockup'larındaki örnek veriler (Nextcloud, Gitea, PostgreSQL vb.) yalnızca demo/seed data'dır — koda veya varsayılan davranışa sabitlenmemeli
-- Boş durum (hiç servis yokken) hem "otomatik algılanan servis yok" hem "manuel ekle" seçeneklerini net şekilde göstermeli
-
----
-
-## 5. Sonraki Adım
-
-- Docker socket okuma ve manuel ekleme veri modelinin (aynı servis listesinde nasıl birleşecekleri) teknik tasarımı yapılmalı
-- Auth yaklaşımı netleştirilmeli
+- Tamamen mobil ve tablet duyarlı: Slide-over drawer, sticky mobil başlık, çift modlu tablolar ve kartlar.
+- Halka Açık Durum Sayfası: Giriş gerektirmeyen, bağımsız `/status` arayüzü.
+- Performans: Rotalar `React.lazy` ile bölünmüş, vendor paketleri ayrıştırılmış, Vite minification limitlerine (<200 KB) tam uyumlu.

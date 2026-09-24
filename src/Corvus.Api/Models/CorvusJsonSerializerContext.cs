@@ -19,7 +19,10 @@ public record CreateServiceRequest(
     string? Url,
     string? Icon,
     string? Category,
-    string? HealthCheckUrl
+    string? HealthCheckUrl,
+    string? CheckType = "http",
+    int? Port = null,
+    bool? IsPublic = true
 );
 
 public record UpdateServiceRequest(
@@ -28,7 +31,62 @@ public record UpdateServiceRequest(
     string? Url,
     string? Icon,
     string? Category,
-    string? HealthCheckUrl
+    string? HealthCheckUrl,
+    string? CheckType = null,
+    int? Port = null,
+    bool? IsPublic = null
+);
+
+public record ContainerStatsDto(
+    string ContainerId,
+    double CpuPercent,
+    long MemoryUsageBytes,
+    long MemoryLimitBytes,
+    double MemoryPercent,
+    long NetworkRxBytes,
+    long NetworkTxBytes
+);
+
+public record CreatePushMonitorRequest(
+    string Name,
+    string? Token,
+    int ExpectedIntervalMinutes = 1440,
+    int GracePeriodMinutes = 60
+);
+
+public record UpdatePushMonitorRequest(
+    string Name,
+    int ExpectedIntervalMinutes,
+    int GracePeriodMinutes
+);
+
+public record ReorderServicesRequest(
+    List<string> ServiceIds
+);
+
+public record PublicServiceDto(
+    string Id,
+    string Name,
+    string? Description,
+    string? Url,
+    string? Icon,
+    string? Category,
+    string Status,
+    int? SslExpiryDays,
+    double UptimePercentage,
+    List<UptimeCheck> RecentChecks
+);
+
+public record PublicStatusPageDto(
+    string SystemStatus,
+    List<PublicServiceDto> Services,
+    string GeneratedAt
+);
+
+public record ServerEventDto(
+    string EventType,
+    string PayloadJson,
+    string Timestamp
 );
 
 public record PushBackupRequest(
@@ -64,6 +122,23 @@ public record GenericApiResponse(
     string? Message
 );
 
+public record ContainerLogsDto(
+    string ContainerId,
+    List<string> Lines
+);
+
+public record TestNotificationRequest(
+    string Channel,
+    string? WebhookUrl,
+    string? BotToken,
+    string? ChatId
+);
+
+public record NotificationResult(
+    bool Success,
+    string Message
+);
+
 [JsonSourceGenerationOptions(
     WriteIndented = false,
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
@@ -83,6 +158,8 @@ public record GenericApiResponse(
 [JsonSerializable(typeof(List<UptimeCheck>))]
 [JsonSerializable(typeof(BackupEvent))]
 [JsonSerializable(typeof(List<BackupEvent>))]
+[JsonSerializable(typeof(PushMonitor))]
+[JsonSerializable(typeof(List<PushMonitor>))]
 [JsonSerializable(typeof(DashboardSummaryDto))]
 [JsonSerializable(typeof(CreateServiceRequest))]
 [JsonSerializable(typeof(UpdateServiceRequest))]
@@ -93,6 +170,17 @@ public record GenericApiResponse(
 [JsonSerializable(typeof(AuthStatusResponse))]
 [JsonSerializable(typeof(GenericApiResponse))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
+[JsonSerializable(typeof(ContainerLogsDto))]
+[JsonSerializable(typeof(TestNotificationRequest))]
+[JsonSerializable(typeof(NotificationResult))]
+[JsonSerializable(typeof(ContainerStatsDto))]
+[JsonSerializable(typeof(CreatePushMonitorRequest))]
+[JsonSerializable(typeof(UpdatePushMonitorRequest))]
+[JsonSerializable(typeof(ReorderServicesRequest))]
+[JsonSerializable(typeof(PublicServiceDto))]
+[JsonSerializable(typeof(PublicStatusPageDto))]
+[JsonSerializable(typeof(ServerEventDto))]
+[JsonSerializable(typeof(string))]
 public partial class CorvusJsonSerializerContext : JsonSerializerContext
 {
 }

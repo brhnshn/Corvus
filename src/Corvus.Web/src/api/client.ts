@@ -11,6 +11,12 @@ export interface Service {
   status: 'healthy' | 'degraded' | 'down' | 'unknown';
   createdAt: string;
   updatedAt: string;
+  checkType?: 'http' | 'tcp';
+  port?: number;
+  sslExpiryDays?: number;
+  sslIssuer?: string;
+  isPublic?: boolean;
+  displayOrder?: number;
 }
 
 export interface DockerContainer {
@@ -22,6 +28,46 @@ export interface DockerContainer {
   Created: number;
   Ports?: { IP?: string; PrivatePort: number; PublicPort?: number; Type?: string }[];
   Labels?: Record<string, string>;
+}
+
+export interface ContainerStats {
+  containerId: string;
+  cpuPercent: number;
+  memoryUsageBytes: number;
+  memoryLimitBytes: number;
+  memoryPercent: number;
+  networkRxBytes: number;
+  networkTxBytes: number;
+}
+
+export interface PushMonitor {
+  id: string;
+  token: string;
+  name: string;
+  expectedIntervalMinutes: number;
+  gracePeriodMinutes: number;
+  lastSeenAt?: string;
+  status: 'healthy' | 'down' | 'unknown';
+  createdAt: string;
+}
+
+export interface PublicService {
+  id: string;
+  name: string;
+  description?: string;
+  url?: string;
+  icon?: string;
+  category?: string;
+  status: string;
+  sslExpiryDays?: number;
+  uptimePercentage: number;
+  recentChecks: { id: number; status: string; responseTimeMs?: number; checkedAt: string }[];
+}
+
+export interface PublicStatusPage {
+  systemStatus: 'all_operational' | 'some_degraded' | 'major_outage';
+  services: PublicService[];
+  generatedAt: string;
 }
 
 export interface SystemMetric {
@@ -125,10 +171,58 @@ export const api = {
   deleteService: (id: string) => fetchJson<{ success: boolean; message?: string }>(`/services/${id}`, {
     method: 'DELETE'
   }),
+  reorderServices: (serviceIds: string[]) => fetchJson<{ success: boolean; message?: string }>('/services/reorder', {
+    method: 'PUT',
+    body: JSON.stringify({ serviceIds })
+  }),
+
+  // Public Status Page
+  getPublicStatusPage: () => fetchJson<PublicStatusPage>('/status-page'),
+
+  // Containers
   getContainers: () => fetchJson<DockerContainer[]>('/containers'),
+  getContainerStats: (id: string) => fetchJson<ContainerStats>(`/containers/${id}/stats`),
   restartContainer: (id: string) => fetchJson<{ success: boolean }>(`/containers/${id}/restart`, {
     method: 'POST'
   }),
+  startContainer: (id: string) => fetchJson<{ success: boolean }>(`/containers/${id}/start`, {
+    method: 'POST'
+  }),
+  stopContainer: (id: string) => fetchJson<{ success: boolean }>(`/containers/${id}/stop`, {
+    method: 'POST'
+  }),
+  pauseContainer: (id: string) => fetchJson<{ success: boolean }>(`/containers/${id}/pause`, {
+    method: 'POST'
+  }),
+  unpauseContainer: (id: string) => fetchJson<{ success: boolean }>(`/containers/${id}/unpause`, {
+    method: 'POST'
+  }),
+  getContainerLogs: (id: string, tail = 100) => fetchJson<{ containerId: string; lines: string[] }>(`/containers/${id}/logs?tail=${tail}`),
+
+  // Dead Man's Snitch (Push Monitors)
+  getPushMonitors: () => fetchJson<PushMonitor[]>('/push-monitors'),
+  createPushMonitor: (data: { name: string; token?: string; expectedIntervalMinutes: number; gracePeriodMinutes: number }) => 
+    fetchJson<PushMonitor>('/push-monitors', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+  updatePushMonitor: (id: string, data: { name: string; expectedIntervalMinutes: number; gracePeriodMinutes: number }) => 
+    fetchJson<PushMonitor>(`/push-monitors/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+  deletePushMonitor: (id: string) => fetchJson<{ success: boolean }>(`/push-monitors/${id}`, {
+    method: 'DELETE'
+  }),
+
+  // Notifications
+  testNotification: (data: { channel: string; webhookUrl?: string; botToken?: string; chatId?: string }) => 
+    fetchJson<{ success: boolean; message: string }>('/notifications/test', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  // Metrics & System
   getSystemMetrics: (range = '24h') => fetchJson<SystemMetric[]>(`/metrics/system?range=${range}`),
   getLatestMetrics: () => fetchJson<SystemMetric>('/metrics/latest'),
   getBackupEvents: (limit = 10) => fetchJson<BackupEvent[]>(`/backup-events?limit=${limit}`),

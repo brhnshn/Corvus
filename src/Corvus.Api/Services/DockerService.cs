@@ -8,6 +8,12 @@ public interface IDockerService
     Task<DockerVersionInfo?> GetVersionAsync(CancellationToken cancellationToken = default);
     Task<List<DockerContainerInfo>> GetContainersAsync(CancellationToken cancellationToken = default);
     Task<bool> RestartContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<bool> StartContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<bool> StopContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<bool> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<bool> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<ContainerStatsDto?> GetContainerStatsAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<List<string>> GetContainerLogsAsync(string containerId, int tail = 100, CancellationToken cancellationToken = default);
     bool ShouldIgnoreContainer(DockerContainerInfo container);
     Service MapContainerToService(DockerContainerInfo container);
 }
@@ -34,6 +40,24 @@ public class DockerService : IDockerService
 
     public Task<bool> RestartContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
         _client.RestartContainerAsync(containerId, cancellationToken);
+
+    public Task<bool> StartContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
+        _client.StartContainerAsync(containerId, cancellationToken);
+
+    public Task<bool> StopContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
+        _client.StopContainerAsync(containerId, cancellationToken);
+
+    public Task<bool> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
+        _client.PauseContainerAsync(containerId, cancellationToken);
+
+    public Task<bool> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
+        _client.UnpauseContainerAsync(containerId, cancellationToken);
+
+    public Task<ContainerStatsDto?> GetContainerStatsAsync(string containerId, CancellationToken cancellationToken = default) =>
+        _client.GetContainerStatsAsync(containerId, cancellationToken);
+
+    public Task<List<string>> GetContainerLogsAsync(string containerId, int tail = 100, CancellationToken cancellationToken = default) =>
+        _client.GetContainerLogsAsync(containerId, tail, cancellationToken);
 
     public bool ShouldIgnoreContainer(DockerContainerInfo container)
     {

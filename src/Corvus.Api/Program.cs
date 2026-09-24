@@ -25,12 +25,15 @@ builder.Services.AddScoped<IServicesRepository, ServicesRepository>();
 builder.Services.AddScoped<IMetricsRepository, MetricsRepository>();
 builder.Services.AddScoped<IUptimeRepository, UptimeRepository>();
 builder.Services.AddScoped<IBackupRepository, BackupRepository>();
+builder.Services.AddScoped<IPushMonitorRepository, PushMonitorRepository>();
 builder.Services.AddSingleton<ISettingsRepository, SettingsRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 
 builder.Services.AddSingleton<IDockerHttpClient, DockerHttpClient>();
 builder.Services.AddSingleton<IDockerService, DockerService>();
 builder.Services.AddSingleton<IAuthService, AuthService>();
+builder.Services.AddSingleton<INotificationService, NotificationService>();
+builder.Services.AddSingleton<IEventBroadcaster, EventBroadcaster>();
 
 // Arka Plan Servisleri
 builder.Services.AddHostedService<ContainerDiscoveryService>();
@@ -81,6 +84,8 @@ app.MapUptimeEndpoints();
 app.MapPushEndpoints();
 app.MapAuthEndpoints();
 app.MapDashboardEndpoints();
+app.MapNotificationEndpoints();
+app.MapStreamEndpoints();
 
 // SPA Routing Fallback
 app.MapFallbackToFile("index.html");

@@ -41,9 +41,9 @@ public class DbConnectionFactory : IDbConnectionFactory
         var connection = new SqliteConnection(_connectionString);
         connection.Open();
 
-        // Performans ve veri bütünlüğü optimizasyonları
+        // Performans ve veri bütünlüğü optimizasyonları (WAL, busy_timeout, foreign_keys, synchronous)
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA synchronous = NORMAL;";
+        cmd.CommandText = "PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000; PRAGMA temp_store = MEMORY; PRAGMA mmap_size = 268435456;";
         cmd.ExecuteNonQuery();
 
         return connection;

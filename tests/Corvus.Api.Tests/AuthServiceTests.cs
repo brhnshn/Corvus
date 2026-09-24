@@ -140,4 +140,24 @@ public class AuthServiceTests
         await authService.SetRegistrationEnabledAsync(true);
         Assert.True(await authService.IsRegistrationEnabledAsync());
     }
+
+    [Fact]
+    public void CheckProxyAuthHeader_Extracts_Identity_From_Trusted_Headers()
+    {
+        var authService = CreateService();
+        var headers = new Microsoft.AspNetCore.Http.HeaderDictionary
+        {
+            ["Tailscale-User-Login"] = "admin@my-tailscale.ts.net"
+        };
+
+        string? user = authService.CheckProxyAuthHeader(headers);
+        Assert.Equal("admin@my-tailscale.ts.net", user);
+
+        var headersCf = new Microsoft.AspNetCore.Http.HeaderDictionary
+        {
+            ["Cf-Access-Authenticated-User-Email"] = "devops@company.com"
+        };
+        string? userCf = authService.CheckProxyAuthHeader(headersCf);
+        Assert.Equal("devops@company.com", userCf);
+    }
 }

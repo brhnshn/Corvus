@@ -12,6 +12,12 @@ public interface IDockerHttpClient
     Task<DockerVersionInfo?> GetVersionAsync(CancellationToken cancellationToken = default);
     Task<List<DockerContainerInfo>> ListContainersAsync(bool all = true, CancellationToken cancellationToken = default);
     Task<bool> RestartContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<bool> StartContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<bool> StopContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<bool> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<bool> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<ContainerStatsDto?> GetContainerStatsAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<List<string>> GetContainerLogsAsync(string containerId, int tail = 100, CancellationToken cancellationToken = default);
 }
 
 public class DockerHttpClient : IDockerHttpClient, IDisposable
@@ -143,6 +149,184 @@ public class DockerHttpClient : IDockerHttpClient, IDisposable
         {
             _logger.LogError(ex, "Container yeniden başlatılamadı: {ContainerId}", containerId);
             return false;
+        }
+    }
+
+    public async Task<bool> StartContainerAsync(string containerId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsync($"/containers/{containerId}/start", null, cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Container başlatılamadı: {ContainerId}", containerId);
+            return false;
+        }
+    }
+
+    public async Task<bool> StopContainerAsync(string containerId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsync($"/containers/{containerId}/stop", null, cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Container durdurulamadı: {ContainerId}", containerId);
+            return false;
+        }
+    }
+
+    public async Task<bool> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsync($"/containers/{containerId}/pause", null, cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Container duraklatılamadı: {ContainerId}", containerId);
+            return false;
+        }
+    }
+
+    public async Task<bool> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsync($"/containers/{containerId}/unpause", null, cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Container devam ettirilemedi: {ContainerId}", containerId);
+            return false;
+        }
+    }
+
+    public async Task<ContainerStatsDto?> GetContainerStatsAsync(string containerId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            string url = $"/containers/{containerId}/stats?stream=false";
+            var response = await _httpClient.GetAsync(url, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            var root = doc.RootElement;
+
+            // CPU Stats
+            long cpuTotal = 0;
+            long systemCpu = 0;
+            int onlineCpus = 1;
+
+            if (root.TryGetProperty("cpu_stats", out var cpuStats))
+            {
+                if (cpuStats.TryGetProperty("cpu_usage", out var cpuUsage))
+                {
+                    if (cpuUsage.TryGetProperty("total_usage", out var tu)) cpuTotal = tu.GetInt64();
+                    if (cpuUsage.TryGetProperty("percpu_usage", out var percpu) && percpu.ValueKind == JsonValueKind.Array)
+                    {
+                        onlineCpus = Math.Max(1, percpu.GetArrayLength());
+                    }
+                }
+                if (cpuStats.TryGetProperty("system_cpu_usage", out var scu)) systemCpu = scu.GetInt64();
+                if (cpuStats.TryGetProperty("online_cpus", out var oc) && oc.GetInt32() > 0)
+                {
+                    onlineCpus = oc.GetInt32();
+                }
+            }
+
+            // Pre-CPU Stats
+            long preCpuTotal = 0;
+            long preSystemCpu = 0;
+            if (root.TryGetProperty("precpu_stats", out var precpuStats))
+            {
+                if (precpuStats.TryGetProperty("cpu_usage", out var preCpuUsage) && preCpuUsage.TryGetProperty("total_usage", out var ptu))
+                {
+                    preCpuTotal = ptu.GetInt64();
+                }
+                if (precpuStats.TryGetProperty("system_cpu_usage", out var pscu))
+                {
+                    preSystemCpu = pscu.GetInt64();
+                }
+            }
+
+            double cpuPercent = 0.0;
+            long cpuDelta = cpuTotal - preCpuTotal;
+            long systemDelta = systemCpu - preSystemCpu;
+            if (systemDelta > 0 && cpuDelta > 0)
+            {
+                cpuPercent = Math.Round(((double)cpuDelta / systemDelta) * onlineCpus * 100.0, 2);
+            }
+
+            // Memory Stats
+            long memUsage = 0;
+            long memLimit = 0;
+            if (root.TryGetProperty("memory_stats", out var memStats))
+            {
+                if (memStats.TryGetProperty("usage", out var mu)) memUsage = mu.GetInt64();
+                if (memStats.TryGetProperty("limit", out var ml)) memLimit = ml.GetInt64();
+            }
+
+            double memPercent = memLimit > 0 ? Math.Round(((double)memUsage / memLimit) * 100.0, 2) : 0.0;
+
+            // Network Stats
+            long netRx = 0;
+            long netTx = 0;
+            if (root.TryGetProperty("networks", out var networks) && networks.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var prop in networks.EnumerateObject())
+                {
+                    if (prop.Value.TryGetProperty("rx_bytes", out var rx)) netRx += rx.GetInt64();
+                    if (prop.Value.TryGetProperty("tx_bytes", out var tx)) netTx += tx.GetInt64();
+                }
+            }
+
+            return new ContainerStatsDto(
+                ContainerId: containerId,
+                CpuPercent: cpuPercent,
+                MemoryUsageBytes: memUsage,
+                MemoryLimitBytes: memLimit,
+                MemoryPercent: memPercent,
+                NetworkRxBytes: netRx,
+                NetworkTxBytes: netTx
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Container stats bilgisi alınamadı: {ContainerId}", containerId);
+            return null;
+        }
+    }
+
+    public async Task<List<string>> GetContainerLogsAsync(string containerId, int tail = 100, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            string url = $"/containers/{containerId}/logs?stdout=true&stderr=true&timestamps=true&tail={tail}";
+            var response = await _httpClient.GetAsync(url, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Docker container logs API hata döndü: {StatusCode}", response.StatusCode);
+                return new List<string>();
+            }
+
+            byte[] bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+            return DockerLogDemuxer.Demux(bytes);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Container logları alınamadı: {ContainerId}", containerId);
+            return new List<string>();
         }
     }
 

@@ -19,6 +19,13 @@ public static class AuthEndpoints
                 return Results.Ok(new AuthStatusResponse(false, true, "anonymous", hasUsers, regEnabled));
             }
 
+            // Zero-Trust SSO / Reverse Proxy Header Kontrolü (Tailscale, Cloudflare Access, vb.)
+            string? proxyUser = auth.CheckProxyAuthHeader(context.Request.Headers);
+            if (!string.IsNullOrEmpty(proxyUser))
+            {
+                return Results.Ok(new AuthStatusResponse(true, true, proxyUser, hasUsers, regEnabled));
+            }
+
             string? token = context.Request.Cookies["corvus_session"];
             var (isAuth, username) = auth.ValidateSessionToken(token);
 

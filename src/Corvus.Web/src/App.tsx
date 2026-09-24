@@ -1,20 +1,44 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense, lazy } from 'react';
 import { api, type AuthStatus } from './api/client';
 import { Sidebar, type PageId } from './components/Sidebar';
-import { AuthPage } from './pages/AuthPage';
 import { RegistrationPromptModal } from './components/RegistrationPromptModal';
-import { DashboardPage } from './pages/Dashboard';
-import { ServicesPage } from './pages/Services';
-import { ContainersPage } from './pages/Containers';
-import { SystemMetricsPage } from './pages/SystemMetrics';
-import { UptimePage } from './pages/Uptime';
-import { SettingsPage } from './pages/Settings';
+import { Menu, RefreshCw } from 'lucide-react';
+
+// Code-splitting via React.lazy for bundle optimization (Roadmap 3.1)
+const DashboardPage = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.DashboardPage })));
+const ServicesPage = lazy(() => import('./pages/Services').then(m => ({ default: m.ServicesPage })));
+const ContainersPage = lazy(() => import('./pages/Containers').then(m => ({ default: m.ContainersPage })));
+const SystemMetricsPage = lazy(() => import('./pages/SystemMetrics').then(m => ({ default: m.SystemMetricsPage })));
+const UptimePage = lazy(() => import('./pages/Uptime').then(m => ({ default: m.UptimePage })));
+const SettingsPage = lazy(() => import('./pages/Settings').then(m => ({ default: m.SettingsPage })));
+const AuthPage = lazy(() => import('./pages/AuthPage').then(m => ({ default: m.AuthPage })));
+const PublicStatus = lazy(() => import('./pages/PublicStatus'));
+
+const pageTitles: Record<PageId, string> = {
+  dashboard: 'Genel Bakış',
+  services: 'Servisler',
+  containers: "Container'lar",
+  metrics: 'Sistem Metrikleri',
+  uptime: 'Uptime',
+  settings: 'Ayarlar'
+};
+
+const PageLoader = () => (
+  <div className="flex items-center justify-center py-20 text-[#9ca3af]">
+    <div className="flex flex-col items-center gap-2">
+      <RefreshCw className="w-6 h-6 animate-spin text-indigo-400" />
+      <span className="text-xs font-mono">Modül yükleniyor...</span>
+    </div>
+  </div>
+);
 
 export const App: React.FC = () => {
+  const isStatusPath = window.location.pathname === '/status' || window.location.pathname.startsWith('/status');
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(!isStatusPath);
   const [currentPage, setCurrentPage] = useState<PageId>('dashboard');
   const [showRegPrompt, setShowRegPrompt] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const checkAuth = async () => {
     try {
@@ -28,15 +52,49 @@ export const App: React.FC = () => {
   };
 
   useEffect(() => {
-    checkAuth();
-  }, []);
+    if (!isStatusPath) {
+      checkAuth();
+    }
+  }, [isStatusPath]);
+
+  // Roadmap 2.1: Server-Sent Events (SSE) Canlı Veri Yayını Bağlantısı
+  useEffect(() => {
+    if (isStatusPath) return;
+
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource('/api/stream/events');
+      eventSource.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data);
+          window.dispatchEvent(new CustomEvent('corvus_event', { detail: parsed }));
+        } catch {
+          // ignore keepalive/ping
+        }
+      };
+    } catch (e) {
+      console.warn('SSE bağlantısı kurulamadı:', e);
+    }
+
+    return () => {
+      eventSource?.close();
+    };
+  }, [isStatusPath]);
+
+  // Roadmap 1.6: Halka Açık Şifresiz Durum Sayfası
+  if (isStatusPath) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <PublicStatus />
+      </Suspense>
+    );
+  }
 
   const handleAuthSuccess = async (isNewRegistration: boolean) => {
     try {
       const status = await api.getAuthStatus();
       setAuthStatus(status);
 
-      // Yeni kayıt olduysa veya kayıtlar açıksa ve sorulması gerekiyorsa modalı aç
       if (isNewRegistration && status.registrationEnabled) {
         setShowRegPrompt(true);
       }
@@ -76,7 +134,11 @@ export const App: React.FC = () => {
 
   // Auth aktif ve kullanıcı giriş yapmamış ise Login/Register sayfasını göster
   if (authStatus && authStatus.authEnabled && !authStatus.isAuthenticated) {
-    return <AuthPage authStatus={authStatus} onAuthSuccess={handleAuthSuccess} />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <AuthPage authStatus={authStatus} onAuthSuccess={handleAuthSuccess} />
+      </Suspense>
+    );
   }
 
   const renderPage = () => {
@@ -99,18 +161,58 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-[#0f1117] text-[#e5e7eb]">
+    <div className="min-h-screen bg-[#0f1117] text-[#e5e7eb] flex flex-col lg:flex-row">
+      {/* Sidebar (Desktop kalıcı, Mobil & Tablet drawer) */}
       <Sidebar 
         currentPage={currentPage} 
         onSelectPage={setCurrentPage} 
         username={authStatus?.username}
         onLogout={authStatus?.authEnabled ? handleLogout : undefined}
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
       />
-      <main className="flex-1 ml-64 p-8 overflow-y-auto min-h-screen">
-        <div className="max-w-7xl mx-auto">
-          {renderPage()}
-        </div>
-      </main>
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
+        {/* Mobil & Tablet Üst Barı (lg:hidden) */}
+        <header className="lg:hidden sticky top-0 z-30 bg-[#1a1d29]/95 backdrop-blur-md border-b border-[#2a2e3f] h-14 px-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="p-1.5 rounded-lg text-[#9ca3af] hover:text-[#e5e7eb] hover:bg-[#1e2130] transition-colors cursor-pointer"
+              title="Menüyü Aç"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+            <div className="flex items-center gap-2">
+              <img
+                src="/Corvus.png"
+                alt="Corvus"
+                className="w-7 h-7 object-contain rounded"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+              <span className="font-bold text-base tracking-wider text-[#e5e7eb]">CORVUS</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium px-2.5 py-1 rounded-md bg-[#0f1117] border border-[#2a2e3f] text-[#d4d4d8]">
+              {pageTitles[currentPage]}
+            </span>
+          </div>
+        </header>
+
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+          <div className="max-w-7xl mx-auto">
+            <Suspense fallback={<PageLoader />}>
+              {renderPage()}
+            </Suspense>
+          </div>
+        </main>
+      </div>
 
       {/* Kayıtları kapatma öneri modalı */}
       <RegistrationPromptModal

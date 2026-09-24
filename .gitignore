@@ -21,6 +21,7 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 
-# Internal / Agent docs
+# Internal / Agent docs & research
 AGENT_PROMPT.md
 GITHUB_SETUP.md
+docs/research/

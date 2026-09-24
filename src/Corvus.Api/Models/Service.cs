@@ -14,4 +14,11 @@ public class Service
     public string Status { get; set; } = "unknown"; // 'healthy' | 'degraded' | 'down' | 'unknown'
     public string CreatedAt { get; set; } = DateTime.UtcNow.ToString("o");
     public string UpdatedAt { get; set; } = DateTime.UtcNow.ToString("o");
+
+    public string CheckType { get; set; } = "http"; // 'http' | 'tcp'
+    public int? Port { get; set; }
+    public int? SslExpiryDays { get; set; }
+    public string? SslIssuer { get; set; }
+    public bool IsPublic { get; set; } = true;
+    public int DisplayOrder { get; set; } = 0;
 }

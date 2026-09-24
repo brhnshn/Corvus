@@ -53,8 +53,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ authStatus, onAuthSuccess })
   };
 
   return (
-    <div className="min-h-screen bg-[#0f1117] flex flex-col justify-center items-center px-4 select-none">
-      <div className="w-full max-w-md bg-[#1a1d29] border border-[#2a2e3f] rounded-2xl p-8 shadow-2xl">
+    <div className="min-h-screen bg-[#0f1117] flex flex-col justify-center items-center p-4 sm:p-6 select-none overflow-y-auto">
+      <div className="w-full max-w-md bg-[#1a1d29] border border-[#2a2e3f] rounded-2xl p-6 sm:p-8 shadow-2xl my-auto">
         {/* Brand Header */}
         <div className="flex flex-col items-center mb-8">
           <img 

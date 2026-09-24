@@ -51,14 +51,14 @@ export const DashboardPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-[#e5e7eb]">Genel Bakış</h1>
           <p className="text-sm text-[#9ca3af]">Sunucu kaynakları, servisler ve container durumu</p>
         </div>
         <button
           onClick={loadData}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#2a2e3f] bg-[#1a1d29] text-xs font-medium text-[#9ca3af] hover:text-[#e5e7eb] hover:bg-[#1e2130] transition-colors"
+          className="self-start sm:self-auto flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#2a2e3f] bg-[#1a1d29] text-xs font-medium text-[#9ca3af] hover:text-[#e5e7eb] hover:bg-[#1e2130] transition-colors cursor-pointer"
         >
           <RefreshCw className="w-3.5 h-3.5" />
           Yenile
@@ -74,9 +74,9 @@ export const DashboardPage: React.FC = () => {
 
       {/* Critical Alert Banner if any down services */}
       {summary && summary.downServices > 0 && (
-        <div className="p-4 rounded-xl bg-[#ef4444]/10 border border-[#ef4444]/30 flex items-center justify-between">
+        <div className="p-4 rounded-xl bg-[#ef4444]/10 border border-[#ef4444]/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-[#ef4444]" />
+            <AlertTriangle className="w-5 h-5 text-[#ef4444] shrink-0" />
             <div>
               <div className="text-sm font-semibold text-[#ef4444]">
                 {summary.downServices} servis şu anda çalışmıyor!
@@ -90,7 +90,7 @@ export const DashboardPage: React.FC = () => {
       )}
 
       {/* Summary KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Services */}
         <div className="p-5 rounded-xl bg-[#1a1d29] border border-[#2a2e3f] flex flex-col justify-between">
           <div className="flex items-center justify-between text-[#9ca3af] text-sm mb-2">
@@ -158,7 +158,7 @@ export const DashboardPage: React.FC = () => {
       </div>
 
       {/* Secondary Row: Storage & Backup Status */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Storage Card */}
         <div className="p-6 rounded-xl bg-[#1a1d29] border border-[#2a2e3f]">
           <div className="flex items-center justify-between mb-4">
