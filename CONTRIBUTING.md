@@ -1,57 +1,64 @@
-# Katkıda Bulunma Kılavuzu (Contributing Guide)
+<div align="center">
 
-Corvus projesine katkıda bulunmak istediğiniz için teşekkür ederiz! Açık kaynak bir self-hosted izleme ve launcher aracı olarak topluluk katkılarını memnuniyetle karşılıyoruz.
+[![English](https://img.shields.io/badge/Language-English-blue?style=for-the-badge)](CONTRIBUTING.md)
+[![Türkçe](https://img.shields.io/badge/Dil-T%C3%BCrk%C3%A7e-red?style=for-the-badge)](CONTRIBUTING.tr.md)
 
-## 🛠️ Yerel Geliştirme Ortamı
+</div>
 
-### Gereksinimler
+# Contributing to Corvus
+
+Thank you for your interest in contributing to Corvus! We welcome contributions from the community to help build the best lightweight, self-hosted server launcher and observability dashboard.
+
+## 🛠️ Local Development Setup
+
+### Prerequisites
 - [.NET 9.0 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
 - [Node.js 20+](https://nodejs.org/)
 - [Docker Desktop](https://www.docker.com/)
 
-### Kurulum Adımları
-1. Repoyu fork'layın ve yerel makinenize klonlayın:
+### Getting Started
+1. Fork and clone the repository:
    ```bash
    git clone https://github.com/brhnshn/Corvus.git
    cd Corvus
    ```
-2. Frontend bağımlılıklarını yükleyin ve derleyin:
+2. Install frontend dependencies and build assets:
    ```bash
    cd src/Corvus.Web
    npm install
    npm run build
    ```
-3. Backend testlerini çalıştırın:
+3. Run backend unit & integration tests:
    ```bash
    cd ../..
    dotnet test tests/Corvus.Api.Tests
    ```
-4. Backend'i yerel ortamda başlatın:
+4. Start the backend locally:
    ```bash
    dotnet run --project src/Corvus.Api
    ```
 
 ---
 
-## 📝 Commit Mesajı Standartları
+## 📝 Commit Guidelines
 
-[Conventional Commits](https://www.conventionalcommits.org/) formatına uymanızı rica ederiz:
-- `feat: yeni bir özellik eklendiğinde`
-- `fix: bir hata düzeltildiğinde`
-- `docs: dokümantasyon güncellemelerinde`
-- `style: kod formatı, stil düzeltmelerinde`
-- `refactor: işlevselliği değiştirmeyen kod iyileştirmelerinde`
-- `test: test eklendiğinde veya güncellendiğinde`
-- `chore: derleme, bağımlılık veya altyapı güncellemelerinde`
+We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
+- `feat:` introduces a new feature
+- `fix:` patches a bug
+- `docs:` documentation updates
+- `style:` code formatting without logic changes
+- `refactor:` code restructuring without behavior modifications
+- `test:` adding or updating tests
+- `chore:` build, CI/CD, or dependency maintenance
 
 ---
 
-## 🚀 Pull Request (PR) Süreci
+## 🚀 Pull Request Workflow
 
-1. Yeni bir özellik veya hata düzeltmesi için anlamlı bir dal (branch) açın:
+1. Create a dedicated feature branch from `main`:
    ```bash
-   git checkout -b feat/yeni-ozellik
+   git checkout -b feat/your-feature-name
    ```
-2. Değişikliklerinizi yapın ve testlerin geçtiğinden emin olun (`dotnet test`).
-3. Temiz ve açıklayıcı commit'lerle dalınızı GitHub'a gönderin.
-4. `main` dalına yönelik bir Pull Request açın ve PR şablonundaki maddeleri doldurun.
+2. Implement your changes and verify all tests pass (`dotnet test`).
+3. Commit with concise, descriptive commit messages.
+4. Open a Pull Request against the `main` branch and fill out the PR template.

@@ -1,29 +1,44 @@
-# Davranış Kuralları (Code of Conduct)
+<div align="center">
 
-## Taahhüdümüz
+[![English](https://img.shields.io/badge/Language-English-blue?style=for-the-badge)](CODE_OF_CONDUCT.md)
+[![Türkçe](https://img.shields.io/badge/Dil-T%C3%BCrk%C3%A7e-red?style=for-the-badge)](CODE_OF_CONDUCT.tr.md)
 
-Corvus projesinin sürdürücüleri ve katılımcıları olarak; yaş, beden ölçüsü, engellilik durumu, etnik köken, cinsiyet kimliği ve ifadesi, deneyim düzeyi, milliyet, kişisel görünüm, ırk, din veya cinsel yönelim gözetmeksizin projemize katkıda bulunan herkes için tacizden ve ayrımcılıktan uzak bir ortam sağlamayı taahhüt ederiz.
+</div>
 
-## Standartlarımız
+# Contributor Covenant Code of Conduct
 
-Olumlu bir topluluk ortamına katkıda bulunan davranışlar şunları içerir:
-- Karşılıklı saygılı ve kapsayıcı bir dil kullanmak
-- Farklı bakış açılarına ve deneyimlere saygı göstermek
-- Yapıcı geri bildirimleri nezaketle kabul etmek
-- Topluluk için neyin en iyisi olduğuna odaklanmak
-- Diğer topluluk üyelerine empati göstermek
+## Our Pledge
 
-Kabul edilemez davranışlar şunları içerir:
-- Cinselleştirilmiş dil, ima veya istenmeyen cinsel yaklaşımlar
-- Trolling, hakaret veya aşağılayıcı yorumlar, kişisel veya siyasi saldırılar
-- Kamu veya özel alanda taciz
-- Başkalarının açık izni olmaksızın fiziksel veya elektronik adres gibi özel bilgilerini yayınlamak
-- Profesyonel bir ortamda makul olarak uygunsuz kabul edilebilecek diğer davranışlar
+We as members, contributors, and leaders pledge to make participation in our community a harassment-free experience for everyone, regardless of age, body size, visible or invisible disability, ethnicity, sex characteristics, gender identity and expression, level of experience, education, socio-economic status, nationality, personal appearance, race, caste, color, religion, or sexual identity and orientation.
 
-## Sorumluluklarımız
+We pledge to act and interact in ways that contribute to an open, welcoming, diverse, inclusive, and healthy community.
 
-Proje yöneticileri, bu davranış kurallarına uymayan yorumları, commit'leri, kodları, wiki düzenlemelerini, issue'ları ve diğer katkıları silme, düzenleme veya reddetme hakkına ve sorumluluğuna sahiptir.
+## Our Standards
 
-## İletişim
+Examples of behavior that contributes to a positive environment for our community include:
+- Demonstrating empathy and kindness toward other people
+- Being respectful of differing opinions, viewpoints, and experiences
+- Giving and gracefully accepting constructive feedback
+- Accepting responsibility and apologizing to those affected by our mistakes, and learning from the experience
+- Focusing on what is best not just for us as individuals, but for the overall community
 
-Kabul edilemez bir davranışla karşılaşırsanız veya şahit olursanız, lütfen proje yöneticileri ile iletişime geçiniz.
+Examples of unacceptable behavior include:
+- The use of sexualized language or imagery, and sexual attention or advances of any kind
+- Trolling, insulting or derogatory comments, and personal or political attacks
+- Public or private harassment
+- Publishing others' private information, such as a physical or email address, without their explicit permission
+- Other conduct which could reasonably be considered inappropriate in a professional setting
+
+## Enforcement Responsibilities
+
+Community leaders are responsible for clarifying and enforcing our standards of acceptable behavior and will take appropriate and fair corrective action in response to any behavior that they deem inappropriate, threatening, offensive, or harmful.
+
+Community leaders have the right and responsibility to remove, edit, or reject comments, commits, code, wiki edits, issues, and other contributions that are not aligned to this Code of Conduct, and will communicate reasons for moderation decisions when appropriate.
+
+## Scope
+
+This Code of Conduct applies within all community spaces, and also applies when an individual is officially representing the community in public spaces.
+
+## Reporting & Contact
+
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project maintainers. All complaints will be reviewed and investigated promptly and fairly.
