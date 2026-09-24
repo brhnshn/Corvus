@@ -14,6 +14,7 @@ import {
   X,
   RefreshCw
 } from 'lucide-react';
+import { useI18n } from '../i18n';
 
 interface UptimeItem {
   id: number;
@@ -25,6 +26,7 @@ interface UptimeItem {
 }
 
 export const UptimePage: React.FC = () => {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<'uptime' | 'snitch'>('uptime');
 
   // Uptime state
@@ -77,10 +79,24 @@ export const UptimePage: React.FC = () => {
     fetchServices();
     fetchSnitches();
     const interval = setInterval(() => {
-      fetchServices();
-      fetchSnitches();
+      if (!document.hidden) {
+        fetchServices();
+        fetchSnitches();
+      }
     }, 15000);
-    return () => clearInterval(interval);
+
+    const onVisible = () => {
+      if (!document.hidden) {
+        fetchServices();
+        fetchSnitches();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   const loadChecks = async (serviceId: string) => {
@@ -102,8 +118,19 @@ export const UptimePage: React.FC = () => {
   useEffect(() => {
     if (selectedServiceId) {
       loadChecks(selectedServiceId);
-      const interval = setInterval(() => loadChecks(selectedServiceId), 15000);
-      return () => clearInterval(interval);
+      const interval = setInterval(() => {
+        if (!document.hidden) loadChecks(selectedServiceId);
+      }, 15000);
+
+      const onVisible = () => {
+        if (!document.hidden) loadChecks(selectedServiceId);
+      };
+      document.addEventListener('visibilitychange', onVisible);
+
+      return () => {
+        clearInterval(interval);
+        document.removeEventListener('visibilitychange', onVisible);
+      };
     }
   }, [selectedServiceId]);
 
@@ -131,7 +158,7 @@ export const UptimePage: React.FC = () => {
   };
 
   const handleDeleteSnitch = async (id: string, name: string) => {
-    if (!confirm(`"${name}" push monitörünü silmek istediğinizden emin misiniz?`)) return;
+    if (!confirm(t('uptime.deletePushConfirm', { name }))) return;
     try {
       await api.deletePushMonitor(id);
       await fetchSnitches();
@@ -160,8 +187,8 @@ export const UptimePage: React.FC = () => {
       {/* Header and Tab Selector */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#e5e7eb]">Uptime & Sağlık Takibi</h1>
-          <p className="text-sm text-[#9ca3af]">HTTP/TCP ping kontrolleri ve periyotlu Dead Man's Snitch bildirimleri</p>
+          <h1 className="text-2xl font-bold text-[#e5e7eb]">{t('uptime.title')}</h1>
+          <p className="text-sm text-[#9ca3af]">{t('uptime.subtitle')}</p>
         </div>
 
         {/* Tab Controls */}
@@ -173,7 +200,7 @@ export const UptimePage: React.FC = () => {
             }`}
           >
             <Activity className="w-3.5 h-3.5" />
-            HTTP & TCP Ping
+            {t('uptime.tabPing')}
           </button>
           <button
             onClick={() => setActiveTab('snitch')}
@@ -182,7 +209,7 @@ export const UptimePage: React.FC = () => {
             }`}
           >
             <Radio className="w-3.5 h-3.5" />
-            Dead Man's Snitch
+            {t('uptime.tabPush')}
           </button>
         </div>
       </div>
@@ -192,9 +219,9 @@ export const UptimePage: React.FC = () => {
         <div className="space-y-6">
           {services.length === 0 ? (
             <div className="p-8 rounded-xl bg-[#1a1d29] border border-[#2a2e3f] text-center max-w-md mx-auto mt-12">
-              <p className="text-sm text-[#e5e7eb] font-semibold mb-1">İzlenecek Servis Bulunamadı</p>
+              <p className="text-sm text-[#e5e7eb] font-semibold mb-1">{t('uptime.noServices')}</p>
               <p className="text-xs text-[#9ca3af] leading-relaxed">
-                Uptime takibi yapabilmek için Servisler sayfasından yeni bir servis ekleyebilir veya sunucunuzdaki Docker container'larını başlatabilirsiniz.
+                {t('uptime.noServicesDesc')}
               </p>
             </div>
           ) : (
@@ -225,21 +252,21 @@ export const UptimePage: React.FC = () => {
                   {/* Stats Header */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="p-4 rounded-xl bg-[#1a1d29] border border-[#2a2e3f]">
-                      <span className="text-xs text-[#9ca3af]">Durum</span>
+                      <span className="text-xs text-[#9ca3af]">{t('uptime.statusCard')}</span>
                       <div className="mt-1">
                         <StatusBadge status={selectedService.status} />
                       </div>
                     </div>
 
                     <div className="p-4 rounded-xl bg-[#1a1d29] border border-[#2a2e3f]">
-                      <span className="text-xs text-[#9ca3af]">Son 7 Günlük Uptime</span>
+                      <span className="text-xs text-[#9ca3af]">{t('uptime.uptime7d')}</span>
                       <div className="text-xl font-bold text-[#e5e7eb] mt-1">
                         %{uptimePercent}
                       </div>
                     </div>
 
                     <div className="p-4 rounded-xl bg-[#1a1d29] border border-[#2a2e3f]">
-                      <span className="text-xs text-[#9ca3af]">Ort. Yanıt Süresi</span>
+                      <span className="text-xs text-[#9ca3af]">{t('uptime.avgLatency')}</span>
                       <div className="text-xl font-bold text-[#e5e7eb] mt-1">
                         {avgLatency > 0 ? `${avgLatency} ms` : '—'}
                       </div>
@@ -250,18 +277,18 @@ export const UptimePage: React.FC = () => {
                   <div className="p-4 rounded-xl bg-[#1a1d29] border border-[#2a2e3f] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="min-w-0">
                       <span className="text-xs text-[#9ca3af] block">
-                        {selectedService.checkType === 'tcp' ? 'Hedef TCP Port / Adres' : 'Kontrol Edilen URL'}
+                        {selectedService.checkType === 'tcp' ? t('uptime.targetTcp') : t('uptime.targetUrl')}
                       </span>
                       <span className="text-sm font-mono text-[#e5e7eb] break-all">
                         {selectedService.checkType === 'tcp'
                           ? `${selectedService.url || 'localhost'}:${selectedService.port || 80}`
-                          : selectedService.healthCheckUrl || selectedService.url || 'Tanımlı adres yok'}
+                          : selectedService.healthCheckUrl || selectedService.url || t('uptime.noAddress')}
                       </span>
                     </div>
 
                     {selectedService.sslExpiryDays !== null && selectedService.sslExpiryDays !== undefined && (
                       <span className="text-xs px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono">
-                        SSL Bitişine: {selectedService.sslExpiryDays} gün
+                        {t('uptime.sslExpiresIn', { days: selectedService.sslExpiryDays })}
                       </span>
                     )}
                   </div>
@@ -269,12 +296,12 @@ export const UptimePage: React.FC = () => {
                   {/* Checks History */}
                   <div className="rounded-xl bg-[#1a1d29] border border-[#2a2e3f] overflow-hidden">
                     <div className="px-4 sm:px-5 py-3 border-b border-[#2a2e3f]">
-                      <h3 className="text-sm font-semibold text-[#e5e7eb]">Son Kontroller</h3>
+                      <h3 className="text-sm font-semibold text-[#e5e7eb]">{t('uptime.recentChecks')}</h3>
                     </div>
 
                     {checks.length === 0 ? (
                       <div className="p-6 text-center text-xs text-[#9ca3af]">
-                        Henüz kayıtlı uptime kontrolü bulunmuyor.
+                        {t('uptime.noChecksYet')}
                       </div>
                     ) : (
                       <div className="divide-y divide-[#2a2e3f]">
@@ -320,9 +347,9 @@ export const UptimePage: React.FC = () => {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-[#e5e7eb]">Dead Man's Snitch Monitörleri</h2>
+              <h2 className="text-lg font-semibold text-[#e5e7eb]">{t('uptime.pushSectionTitle')}</h2>
               <p className="text-xs text-[#9ca3af]">
-                Periyodik cron veya yedekleme scriptlerinizden gelen sinyalleri izler; belirlenen sürede sinyal gelmezse alarm tetikler.
+                {t('uptime.pushSectionDesc')}
               </p>
             </div>
             <button
@@ -330,30 +357,30 @@ export const UptimePage: React.FC = () => {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#d4d4d8] text-[#0f1117] text-xs font-semibold hover:bg-[#e4e4e7] transition-colors cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              Yeni Snitch Ekle
+              {t('uptime.addPushMonitor')}
             </button>
           </div>
 
           {loadingSnitches && snitches.length === 0 && (
             <div className="flex items-center justify-center h-48 text-[#9ca3af]">
               <RefreshCw className="w-6 h-6 animate-spin mr-2" />
-              Monitörler yükleniyor...
+              {t('common.loading')}
             </div>
           )}
 
           {!loadingSnitches && snitches.length === 0 && (
             <div className="p-10 rounded-2xl bg-[#1a1d29] border border-[#2a2e3f] text-center max-w-md mx-auto space-y-3">
               <Radio className="w-10 h-10 text-[#9ca3af]/40 mx-auto" />
-              <h3 className="text-base font-semibold text-[#e5e7eb]">Kayıtlı Snitch Yok</h3>
+              <h3 className="text-base font-semibold text-[#e5e7eb]">{t('uptime.noPushMonitors')}</h3>
               <p className="text-xs text-[#9ca3af]">
-                Yedekleme scriptlerinizin veya cron işlerinizin çalışıp çalışmadığını izlemek için ilk push monitörünüzü oluşturun.
+                {t('uptime.noPushMonitorsDesc')}
               </p>
               <button
                 onClick={() => setShowAddSnitchModal(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#d4d4d8] text-[#0f1117] text-xs font-semibold hover:bg-[#e4e4e7] cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Snitch Oluştur
+                {t('uptime.createPushMonitor')}
               </button>
             </div>
           )}
@@ -383,11 +410,11 @@ export const UptimePage: React.FC = () => {
                                 : 'bg-slate-800 text-slate-400 border border-slate-700'
                             }`}
                           >
-                            {isHealthy ? 'Sinyal Alınıyor' : isDown ? 'Zaman Aşımı (DOWN)' : 'Bekleniyor'}
+                            {isHealthy ? t('uptime.signalReceiving') : isDown ? t('uptime.signalTimeout') : t('uptime.signalWaiting')}
                           </span>
                         </div>
                         <div className="flex items-center gap-3 text-xs text-[#9ca3af] mt-1 font-mono">
-                          <span>Beklenen Periyot: {snitch.expectedIntervalMinutes} dk (±{snitch.gracePeriodMinutes} dk tolerans)</span>
+                          <span>{t('uptime.expectedPeriodLabel', { interval: snitch.expectedIntervalMinutes, grace: snitch.gracePeriodMinutes })}</span>
                         </div>
                       </div>
 
@@ -395,7 +422,7 @@ export const UptimePage: React.FC = () => {
                         <button
                           onClick={() => handleDeleteSnitch(snitch.id, snitch.name)}
                           className="p-1.5 rounded-lg text-[#9ca3af] hover:text-[#ef4444] hover:bg-[#0f1117] transition-colors cursor-pointer"
-                          title="Sil"
+                          title={t('common.delete')}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -406,9 +433,9 @@ export const UptimePage: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-[#2a2e3f]/60 text-xs">
                       <div className="flex items-center gap-2 text-[#9ca3af]">
                         <Clock className="w-4 h-4 text-slate-500" />
-                        <span>Son Sinyal: </span>
+                        <span>{t('uptime.lastSignal')} </span>
                         <span className="text-[#e5e7eb] font-mono">
-                          {snitch.lastSeenAt ? new Date(snitch.lastSeenAt).toLocaleString() : 'Henüz sinyal gelmedi'}
+                          {snitch.lastSeenAt ? new Date(snitch.lastSeenAt).toLocaleString() : t('uptime.noSignalYet')}
                         </span>
                       </div>
 
@@ -419,7 +446,7 @@ export const UptimePage: React.FC = () => {
                         <button
                           onClick={() => handleCopyCurl(snitch.token)}
                           className="p-1 text-[#9ca3af] hover:text-[#e5e7eb] transition-colors cursor-pointer"
-                          title="Curl komutunu kopyala"
+                          title={t('uptime.copyCurlTooltip')}
                         >
                           {copiedToken === snitch.token ? (
                             <Check className="w-3.5 h-3.5 text-emerald-400" />
@@ -440,7 +467,7 @@ export const UptimePage: React.FC = () => {
             <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto">
               <div className="bg-[#1a1d29] border border-[#2a2e3f] rounded-2xl p-5 sm:p-6 w-full max-w-md max-h-[92vh] overflow-y-auto space-y-4 shadow-2xl my-auto">
                 <div className="flex items-center justify-between border-b border-[#2a2e3f] pb-3">
-                  <h3 className="font-semibold text-[#e5e7eb] text-base">Yeni Dead Man's Snitch Ekle</h3>
+                  <h3 className="font-semibold text-[#e5e7eb] text-base">{t('uptime.newPushModalTitle')}</h3>
                   <button
                     onClick={() => setShowAddSnitchModal(false)}
                     className="text-[#9ca3af] hover:text-white p-1 rounded-lg cursor-pointer"
@@ -451,11 +478,11 @@ export const UptimePage: React.FC = () => {
 
                 <form onSubmit={handleCreateSnitch} className="space-y-3 text-sm">
                   <div>
-                    <label className="block text-xs font-medium text-[#9ca3af] mb-1">Monitör Adı *</label>
+                    <label className="block text-xs font-medium text-[#9ca3af] mb-1">{t('uptime.monitorName')}</label>
                     <input
                       type="text"
                       required
-                      placeholder="örn. Gece Veritabanı Yedeği, Cronjob sync"
+                      placeholder={t('uptime.monitorNamePlaceholder')}
                       value={snitchName}
                       onChange={(e) => setSnitchName(e.target.value)}
                       className="w-full bg-[#0f1117] border border-[#2a2e3f] rounded-lg px-3 py-2 text-[#e5e7eb] focus:outline-none focus:border-[#d4d4d8]"
@@ -463,21 +490,21 @@ export const UptimePage: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-[#9ca3af] mb-1">Beklenen Periyot (Dakika)</label>
+                    <label className="block text-xs font-medium text-[#9ca3af] mb-1">{t('uptime.expectedInterval')}</label>
                     <input
                       type="number"
                       required
                       min={1}
-                      placeholder="1440 (24 saat için)"
+                      placeholder="1440"
                       value={snitchInterval}
                       onChange={(e) => setSnitchInterval(Number(e.target.value))}
                       className="w-full bg-[#0f1117] border border-[#2a2e3f] rounded-lg px-3 py-2 text-[#e5e7eb] focus:outline-none focus:border-[#d4d4d8]"
                     />
-                    <span className="text-[10px] text-[#9ca3af] block mt-1">Örn: 60 (1 saat), 1440 (1 gün)</span>
+                    <span className="text-[10px] text-[#9ca3af] block mt-1">{t('uptime.intervalHelp')}</span>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-[#9ca3af] mb-1">Tolerans Süresi / Grace Period (Dakika)</label>
+                    <label className="block text-xs font-medium text-[#9ca3af] mb-1">{t('uptime.gracePeriod')}</label>
                     <input
                       type="number"
                       required
@@ -487,7 +514,7 @@ export const UptimePage: React.FC = () => {
                       onChange={(e) => setSnitchGrace(Number(e.target.value))}
                       className="w-full bg-[#0f1117] border border-[#2a2e3f] rounded-lg px-3 py-2 text-[#e5e7eb] focus:outline-none focus:border-[#d4d4d8]"
                     />
-                    <span className="text-[10px] text-[#9ca3af] block mt-1">Periyot dolduktan sonra alarm öncesi ek bekleme süresi</span>
+                    <span className="text-[10px] text-[#9ca3af] block mt-1">{t('uptime.graceHelp')}</span>
                   </div>
 
                   <div className="flex justify-end gap-2 pt-3 border-t border-[#2a2e3f]">
@@ -496,14 +523,14 @@ export const UptimePage: React.FC = () => {
                       onClick={() => setShowAddSnitchModal(false)}
                       className="px-4 py-2 rounded-lg border border-[#2a2e3f] text-xs font-medium text-[#9ca3af] hover:text-[#e5e7eb] cursor-pointer"
                     >
-                      İptal
+                      {t('common.cancel')}
                     </button>
                     <button
                       type="submit"
                       disabled={savingSnitch}
                       className="px-4 py-2 rounded-lg bg-[#d4d4d8] text-[#0f1117] text-xs font-semibold hover:bg-[#e4e4e7] disabled:opacity-50 cursor-pointer"
                     >
-                      {savingSnitch ? 'Oluşturuluyor...' : 'Oluştur'}
+                      {savingSnitch ? t('common.saving') : t('common.save')}
                     </button>
                   </div>
                 </form>

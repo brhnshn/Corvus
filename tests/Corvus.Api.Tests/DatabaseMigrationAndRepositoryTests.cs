@@ -125,6 +125,59 @@ public class DatabaseMigrationAndRepositoryTests : IDisposable
         Assert.Null(afterDelete);
     }
 
+    [Fact]
+    public async Task UptimeRepository_Get24hUptimePercentagesAsync_CalculatesCorrectly()
+    {
+        var servicesRepo = new ServicesRepository(_dbFactory);
+        var created = await servicesRepo.CreateManualAsync(new CreateServiceRequest(
+            Name: "Uptime Test Svc",
+            Description: null,
+            Url: "http://localhost",
+            Icon: null,
+            Category: "Test",
+            HealthCheckUrl: null,
+            CheckType: "http",
+            Port: null,
+            IsPublic: true
+        ));
+
+        var uptimeRepo = new UptimeRepository(_dbFactory);
+        string svcId = created.Id;
+
+        // Insert 3 up checks, 1 down check
+        await uptimeRepo.InsertAsync(new UptimeCheck { ServiceId = svcId, CheckedAt = DateTime.UtcNow.AddHours(-1).ToString("o"), Status = "up" });
+        await uptimeRepo.InsertAsync(new UptimeCheck { ServiceId = svcId, CheckedAt = DateTime.UtcNow.AddHours(-2).ToString("o"), Status = "up" });
+        await uptimeRepo.InsertAsync(new UptimeCheck { ServiceId = svcId, CheckedAt = DateTime.UtcNow.AddHours(-3).ToString("o"), Status = "up" });
+        await uptimeRepo.InsertAsync(new UptimeCheck { ServiceId = svcId, CheckedAt = DateTime.UtcNow.AddHours(-4).ToString("o"), Status = "down" });
+
+        var percentages = await uptimeRepo.Get24hUptimePercentagesAsync();
+        Assert.True(percentages.ContainsKey(svcId));
+        // 3 up out of 4 = 75.0%
+        Assert.Equal(75.0, percentages[svcId]);
+    }
+
+    [Fact]
+    public async Task ServicesRepository_SyncDockerBatchAsync_WorksInSingleTransaction()
+    {
+        var servicesRepo = new ServicesRepository(_dbFactory);
+        var services = new List<Service>
+        {
+            new() { Id = "docker_c1", Source = "docker", ContainerId = "c1", Name = "Container 1", Status = "healthy", CreatedAt = DateTime.UtcNow.ToString("o"), UpdatedAt = DateTime.UtcNow.ToString("o") },
+            new() { Id = "docker_c2", Source = "docker", ContainerId = "c2", Name = "Container 2", Status = "healthy", CreatedAt = DateTime.UtcNow.ToString("o"), UpdatedAt = DateTime.UtcNow.ToString("o") }
+        };
+
+        await servicesRepo.SyncDockerBatchAsync(services, ["c1", "c2"]);
+        var all = await servicesRepo.GetAllAsync();
+        Assert.Contains(all, s => s.Id == "docker_c1");
+        Assert.Contains(all, s => s.Id == "docker_c2");
+
+        // Now sync with only c1 active -> c2 should be removed
+        await servicesRepo.SyncDockerBatchAsync(services.Take(1).ToList(), ["c1"]);
+        var updatedAll = await servicesRepo.GetAllAsync();
+        Assert.Contains(updatedAll, s => s.Id == "docker_c1");
+        Assert.DoesNotContain(updatedAll, s => s.Id == "docker_c2");
+    }
+
     public void Dispose()
     {
         try

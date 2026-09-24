@@ -40,12 +40,15 @@ Corvus is an open-source, ultra-low resource consumption service launcher and un
 - **TypeScript + React 19 + Vite**
 - Styling: **Tailwind CSS v4**
 - Charting: **Recharts**
+- Internationalization (i18n): **Native React 19 Context** with compile-time type safety (`DeepStringify`), zero external library overhead (~1.2 KB), primary English (`en`) and complete Turkish (`tr`) support, dynamic switcher
 - Code-Splitting: **React.lazy + Suspense** and Vite `manualChunks` with an initial bundle payload under 200 KB
 - Real-Time Communication: REST + **Server-Sent Events (SSE)** for live status broadcasts
 
 ### Persistence Layer
-- **SQLite (Microsoft.Data.Sqlite) + Dapper (Dapper.AOT)**: WAL mode with `PRAGMA busy_timeout = 5000;` and `PRAGMA temp_store = MEMORY;`
-- **DbUp**: Sequential SQL-first schema migrations (`001_init.sql`, `002_add_users.sql`, `003_roadmap_features.sql`)
+- **SQLite (Microsoft.Data.Sqlite) + Dapper (Dapper.AOT)**: WAL mode with `PRAGMA busy_timeout = 5000;`, `PRAGMA synchronous = NORMAL;`, `PRAGMA temp_store = MEMORY;`, `PRAGMA cache_size = -64000;` and periodic `PRAGMA optimize;`
+- **DbUp**: Sequential SQL-first schema migrations (`001_init.sql`, `002_add_users.sql`, `003_roadmap_features.sql`, `004_performance_indexes.sql`)
+- Composite indexes on `system_metrics(recorded_at)` and `uptime_checks(service_id, checked_at)`
+- **Backup & Retention Engine**: Point-in-time lock-free SQLite snapshot downloads (`VACUUM INTO`), live database disk usage telemetry (`GET /api/settings/db-stats`), and dynamic background retention cleaner with Unlimited mode
 
 ---
 
@@ -180,7 +183,7 @@ Incoming push monitor heartbeat records.
 | `ContainerDiscoveryService` | 10 sec | Synchronizes container state from the Docker socket |
 | `SystemMetricsCollector` | 15 sec | Samples host CPU, RAM, disk, and network stats into `system_metrics` |
 | `UptimeCheckerService` | 60 sec | Verifies HTTP status, TCP port reachability, and SSL expiration days; evaluates Dead Man's Snitch timeouts; triggers multi-channel alerts upon status change and publishes SSE events |
-| `RetentionCleanupService` | Once daily | Prunes aged time-series records from `system_metrics` and `uptime_checks` (default: 30 days) |
+| `RetentionCleanupService` | Once daily | Dynamically reads `retention_days` from application settings; prunes aged time-series records from `system_metrics` and `uptime_checks` when > 0, skips deletion when 0 (Unlimited mode), and executes `PRAGMA optimize;` |
 
 ---
 
@@ -200,12 +203,12 @@ Incoming push monitor heartbeat records.
 
 | Page | URL | Features |
 |---|---|---|
-| **Dashboard** | `/` | Operational service KPIs, container summaries, live resource graphs, and backup status |
+| **Dashboard** | `/` | Operational service KPIs, container summaries, live resource graphs, and live-updating backup status |
 | **Services** | `/` | Service launchpad, status badges, TCP indicators, SSL expiration badge, and reordering controls |
 | **Containers** | `/` | Live CPU%, RAM, and Net I/O badges, Start/Stop/Pause/Restart actions, Compose stack accordion grouping, live log terminal |
 | **System Metrics**| `/` | Telemetry graphs across 1h, 6h, 12h, 24h, 7d periods for CPU, RAM, Disk, and Network |
 | **Uptime & Snitch** | `/` | Response latency charts and Dead Man's Snitch cron/backup monitor tab |
-| **Settings** | `/` | Multi-channel alert configuration (Discord, Telegram, Ntfy, Webhook) and test notifications |
+| **Settings** | `/` | Tabbed alert channel configuration (Discord, Telegram, Ntfy, Webhook), test notifications, dual-mode backup management (internal snapshot download via `VACUUM INTO` + external push integration), flexible data retention (7-365 days, Unlimited mode, risk warning), and real-time database disk usage telemetry |
 | **Public Status** | `/status` | **Unauthenticated:** Operational status banner, service uptime metrics, and SSL certificates |
 
 ---
@@ -213,9 +216,9 @@ Incoming push monitor heartbeat records.
 ## 8. Completed Roadmap Milestones
 
 - [x] Native AOT + custom SocketsHttpHandler direct socket client
-- [x] Dapper.AOT + Microsoft.Data.Sqlite + DbUp schema migrations
+- [x] Dapper.AOT + Microsoft.Data.Sqlite + DbUp schema migrations (001-004)
 - [x] Docker socket multiplexed log demuxer and live log streaming
-- [x] Multi-channel alert engine (Discord, Telegram, Ntfy, Webhook)
+- [x] Multi-channel alert engine (Discord, Telegram, Ntfy, Webhook) with system-language synchronization
 - [x] Live container resource stats (CPU, RAM, Net I/O)
 - [x] Extended Uptime: TCP Port Ping & SSL certificate expiration tracking
 - [x] Dead Man's Snitch: Periodic push monitoring with auto-overdue alerting
@@ -225,6 +228,9 @@ Incoming push monitor heartbeat records.
 - [x] Zero-Trust SSO / Reverse proxy authentication header support
 - [x] Visual service drag & drop reordering (`display_order` and `/api/services/reorder`)
 - [x] Frontend code-splitting and vendor chunk optimization (<200 KB initial chunk)
-- [x] SQLite WAL mode and high-concurrency PRAGMA tuning
+- [x] SQLite WAL mode, composite indexes, and high-concurrency PRAGMA tuning
 - [x] Mobile & tablet responsive drawer navigation and dual-mode responsive layout
-- [x] 34/34 passing xUnit test coverage
+- [x] Full compile-time typed bilingual i18n system (English default, Turkish complete)
+- [x] Dual-mode backup management: One-click lock-free SQLite snapshot download (`GET /api/backup/download`) with SSE live Dashboard updates + external push integration
+- [x] Flexible data retention & disk telemetry: Presets, Unlimited mode with disk advisory, live DB size indicator, and dynamic `RetentionCleanupService`
+- [x] 60/60 passing xUnit test coverage

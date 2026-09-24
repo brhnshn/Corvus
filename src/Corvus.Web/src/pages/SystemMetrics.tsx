@@ -10,8 +10,10 @@ import {
   CartesianGrid 
 } from 'recharts';
 import { RefreshCw, Activity } from 'lucide-react';
+import { useI18n } from '../i18n';
 
 export const SystemMetricsPage: React.FC = () => {
+  const { t } = useI18n();
   const [metrics, setMetrics] = useState<SystemMetric[]>([]);
   const [range, setRange] = useState('24h');
   const [loading, setLoading] = useState(true);
@@ -29,16 +31,27 @@ export const SystemMetricsPage: React.FC = () => {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 15000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      if (!document.hidden) loadData();
+    }, 15000);
+
+    const onVisible = () => {
+      if (!document.hidden) loadData();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [range]);
 
   const ranges = [
-    { id: '1h', label: '1 Saat' },
-    { id: '6h', label: '6 Saat' },
-    { id: '12h', label: '12 Saat' },
-    { id: '24h', label: '24 Saat' },
-    { id: '7d', label: '7 Gün' }
+    { id: '1h', label: t('metrics.range1h') },
+    { id: '6h', label: t('metrics.range6h') },
+    { id: '12h', label: t('metrics.range12h') },
+    { id: '24h', label: t('metrics.range24h') },
+    { id: '7d', label: t('metrics.range7d') }
   ];
 
   const chartData = metrics.map((m) => {
@@ -56,8 +69,8 @@ export const SystemMetricsPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#e5e7eb]">Sistem Metrikleri</h1>
-          <p className="text-sm text-[#9ca3af]">Zaman serisi sistem kaynağı tüketim grafikleri</p>
+          <h1 className="text-2xl font-bold text-[#e5e7eb]">{t('metrics.title')}</h1>
+          <p className="text-sm text-[#9ca3af]">{t('metrics.subtitle')}</p>
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2 bg-[#1a1d29] p-1 rounded-xl border border-[#2a2e3f] overflow-x-auto max-w-full">
@@ -80,7 +93,7 @@ export const SystemMetricsPage: React.FC = () => {
       {loading && metrics.length === 0 && (
         <div className="flex items-center justify-center h-64 text-[#9ca3af]">
           <RefreshCw className="w-6 h-6 animate-spin mr-2" />
-          Metrikler yükleniyor...
+          {t('common.loading')}
         </div>
       )}
 
@@ -89,10 +102,10 @@ export const SystemMetricsPage: React.FC = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Activity className="w-4 h-4 text-[#d4d4d8]" />
-            <h2 className="text-base font-semibold text-[#e5e7eb]">CPU Kullanımı (%)</h2>
+            <h2 className="text-base font-semibold text-[#e5e7eb]">{t('metrics.cpuChartTitle')}</h2>
           </div>
           <span className="text-xs font-mono text-[#9ca3af]">
-            Son Değer: {metrics.length > 0 ? `${metrics[metrics.length - 1].cpuPercent}%` : '--'}
+            {t('metrics.lastValue', { value: metrics.length > 0 ? `${metrics[metrics.length - 1].cpuPercent}%` : '--' })}
           </span>
         </div>
 
@@ -131,10 +144,10 @@ export const SystemMetricsPage: React.FC = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Activity className="w-4 h-4 text-[#d4d4d8]" />
-            <h2 className="text-base font-semibold text-[#e5e7eb]">RAM Kullanımı (GB)</h2>
+            <h2 className="text-base font-semibold text-[#e5e7eb]">{t('metrics.ramChartTitle')}</h2>
           </div>
           <span className="text-xs font-mono text-[#9ca3af]">
-            Son Değer: {metrics.length > 0 ? `${(metrics[metrics.length - 1].ramUsedMb / 1024).toFixed(1)} GB` : '--'}
+            {t('metrics.lastValue', { value: metrics.length > 0 ? `${(metrics[metrics.length - 1].ramUsedMb / 1024).toFixed(1)} GB` : '--' })}
           </span>
         </div>
 
@@ -157,7 +170,7 @@ export const SystemMetricsPage: React.FC = () => {
               <Area 
                 type="monotone" 
                 dataKey="ramUsedGb" 
-                name="Kullanılan RAM" 
+                name={t('metrics.usedRamName')} 
                 stroke="#d4d4d8" 
                 strokeWidth={2}
                 fillOpacity={1} 

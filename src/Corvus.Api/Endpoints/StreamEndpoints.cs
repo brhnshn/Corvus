@@ -14,22 +14,58 @@ public static class StreamEndpoints
             context.Response.Headers.CacheControl = "no-cache";
             context.Response.Headers.Connection = "keep-alive";
 
+            var writeLock = new SemaphoreSlim(1, 1);
+
+            async Task SendDataAsync(string data, CancellationToken token)
+            {
+                await writeLock.WaitAsync(token);
+                try
+                {
+                    await context.Response.WriteAsync(data, token);
+                    await context.Response.Body.FlushAsync(token);
+                }
+                finally
+                {
+                    writeLock.Release();
+                }
+            }
+
             // İlk bağlantı selamlama sinyali
-            await context.Response.WriteAsync("data: {\"eventType\":\"connected\",\"payload\":\"{}\"}\n\n", ct);
-            await context.Response.Body.FlushAsync(ct);
+            await SendDataAsync("data: {\"eventType\":\"connected\",\"payload\":\"{}\"}\n\n", ct);
+
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var pingTask = Task.Run(async () =>
+            {
+                while (!linkedCts.Token.IsCancellationRequested)
+                {
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(15), linkedCts.Token);
+                        await SendDataAsync(": ping\n\n", linkedCts.Token);
+                    }
+                    catch
+                    {
+                        break;
+                    }
+                }
+            }, linkedCts.Token);
 
             try
             {
-                await foreach (var evt in broadcaster.SubscribeAsync(ct))
+                await foreach (var evt in broadcaster.SubscribeAsync(linkedCts.Token))
                 {
                     string json = JsonSerializer.Serialize(evt, CorvusJsonSerializerContext.Default.ServerEventDto);
-                    await context.Response.WriteAsync($"data: {json}\n\n", ct);
-                    await context.Response.Body.FlushAsync(ct);
+                    await SendDataAsync($"data: {json}\n\n", linkedCts.Token);
                 }
             }
             catch (OperationCanceledException)
             {
                 // İstemci bağlantıyı kapattığında normal sonlanma
+            }
+            finally
+            {
+                linkedCts.Cancel();
+                try { await pingTask; } catch { }
             }
         });
     }

@@ -3,6 +3,7 @@ import { api, type AuthStatus } from './api/client';
 import { Sidebar, type PageId } from './components/Sidebar';
 import { RegistrationPromptModal } from './components/RegistrationPromptModal';
 import { Menu, RefreshCw } from 'lucide-react';
+import { useI18n } from './i18n';
 
 // Code-splitting via React.lazy for bundle optimization (Roadmap 3.1)
 const DashboardPage = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.DashboardPage })));
@@ -14,25 +15,17 @@ const SettingsPage = lazy(() => import('./pages/Settings').then(m => ({ default:
 const AuthPage = lazy(() => import('./pages/AuthPage').then(m => ({ default: m.AuthPage })));
 const PublicStatus = lazy(() => import('./pages/PublicStatus'));
 
-const pageTitles: Record<PageId, string> = {
-  dashboard: 'Genel Bakış',
-  services: 'Servisler',
-  containers: "Container'lar",
-  metrics: 'Sistem Metrikleri',
-  uptime: 'Uptime',
-  settings: 'Ayarlar'
-};
-
 const PageLoader = () => (
   <div className="flex items-center justify-center py-20 text-[#9ca3af]">
     <div className="flex flex-col items-center gap-2">
       <RefreshCw className="w-6 h-6 animate-spin text-indigo-400" />
-      <span className="text-xs font-mono">Modül yükleniyor...</span>
+      <span className="text-xs font-mono">Loading...</span>
     </div>
   </div>
 );
 
 export const App: React.FC = () => {
+  const { t } = useI18n();
   const isStatusPath = window.location.pathname === '/status' || window.location.pathname.startsWith('/status');
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [authLoading, setAuthLoading] = useState(!isStatusPath);
@@ -126,7 +119,7 @@ export const App: React.FC = () => {
       <div className="min-h-screen bg-[#0f1117] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-[#d4d4d8] border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs text-[#9ca3af] font-mono tracking-wider">Yükleniyor...</span>
+          <span className="text-xs text-[#9ca3af] font-mono tracking-wider">{t('common.loading')}</span>
         </div>
       </div>
     );
@@ -160,6 +153,17 @@ export const App: React.FC = () => {
     }
   };
 
+  const getPageTitle = (page: PageId) => {
+    switch (page) {
+      case 'dashboard': return t('nav.dashboard');
+      case 'services': return t('nav.services');
+      case 'containers': return t('nav.containers');
+      case 'metrics': return t('nav.metrics');
+      case 'uptime': return t('nav.uptime');
+      case 'settings': return t('nav.settings');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#0f1117] text-[#e5e7eb] flex flex-col lg:flex-row">
       {/* Sidebar (Desktop kalıcı, Mobil & Tablet drawer) */}
@@ -181,7 +185,6 @@ export const App: React.FC = () => {
               type="button"
               onClick={() => setIsMobileMenuOpen(true)}
               className="p-1.5 rounded-lg text-[#9ca3af] hover:text-[#e5e7eb] hover:bg-[#1e2130] transition-colors cursor-pointer"
-              title="Menüyü Aç"
             >
               <Menu className="w-6 h-6" />
             </button>
@@ -200,7 +203,7 @@ export const App: React.FC = () => {
 
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium px-2.5 py-1 rounded-md bg-[#0f1117] border border-[#2a2e3f] text-[#d4d4d8]">
-              {pageTitles[currentPage]}
+              {getPageTitle(currentPage)}
             </span>
           </div>
         </header>

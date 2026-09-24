@@ -65,13 +65,16 @@ public class UpdateCheckerService : IUpdateCheckerService
             var isUpdateAvailable = false;
             var releaseUrl = $"https://github.com/brhnshn/corvus/releases";
 
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/repos/brhnshn/corvus/releases/latest");
                 request.Headers.Add("User-Agent", "Corvus-Server/1.0");
                 request.Headers.Add("Accept", "application/vnd.github.v3+json");
 
-                using var response = await _httpClient.SendAsync(request, ct);
+                using var response = await _httpClient.SendAsync(request, linkedCts.Token);
                 if (response.IsSuccessStatusCode)
                 {
                     var release = await response.Content.ReadFromJsonAsync(

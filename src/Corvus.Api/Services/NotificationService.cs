@@ -30,13 +30,24 @@ public class NotificationService : INotificationService
     public async Task DispatchServiceAlertAsync(string serviceName, string? url, bool isDown, string? errorMessage, CancellationToken ct = default)
     {
         var settings = await _settings.GetAllAsync();
+        if (settings.TryGetValue("notify_service_events", out var nse) && nse == "false")
+        {
+            return; // Servis kesintisi bildirimleri devre dışı bırakılmış
+        }
+
+        bool isTr = settings.TryGetValue("system_language", out var lang) && lang?.ToLowerInvariant() == "tr";
+
         string title = isDown 
-            ? $"🔴 [SERVİS ÇÖKTÜ] {serviceName}" 
-            : $"🟢 [SERVİS KURTARILDI] {serviceName}";
+            ? (isTr ? $"[SERVİS KESİNTİSİ] {serviceName}" : $"[SERVICE OUTAGE] {serviceName}")
+            : (isTr ? $"[SERVİS KURTARILDI] {serviceName}" : $"[SERVICE RECOVERED] {serviceName}");
 
         string message = isDown
-            ? $"Servis erişilemez durumda!\nURL: {url ?? "Belirtilmedi"}\nHata: {errorMessage ?? "Bilinmiyor"}\nZaman: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC"
-            : $"Servis tekrar sağlıklı şekilde yanıt veriyor.\nURL: {url ?? "Belirtilmedi"}\nZaman: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC";
+            ? (isTr
+                ? $"Servis erişilemez durumda!\nURL: {url ?? "Belirtilmedi"}\nHata: {errorMessage ?? "Bilinmiyor"}\nZaman: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC"
+                : $"Service is unreachable!\nURL: {url ?? "Not specified"}\nError: {errorMessage ?? "Unknown"}\nTime: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC")
+            : (isTr
+                ? $"Servis tekrar sağlıklı şekilde yanıt veriyor.\nURL: {url ?? "Belirtilmedi"}\nZaman: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC"
+                : $"Service is responding healthy again.\nURL: {url ?? "Not specified"}\nTime: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC");
 
         var tasks = new List<Task>();
 
@@ -77,8 +88,13 @@ public class NotificationService : INotificationService
 
     public async Task<NotificationResult> TestChannelAsync(string channel, string? webhookUrl, string? botToken, string? chatId, CancellationToken ct = default)
     {
-        string title = "🚀 Corvus Test Bildirimi";
-        string message = "Bu bildirim Corvus System Monitor tarafından başarıyla gönderildi. Bildirim entegrasyonunuz aktif ve çalışıyor!";
+        var settings = await _settings.GetAllAsync();
+        bool isTr = settings.TryGetValue("system_language", out var lang) && lang?.ToLowerInvariant() == "tr";
+
+        string title = isTr ? "Corvus Test Bildirimi" : "Corvus Test Notification";
+        string message = isTr 
+            ? "Bu bildirim Corvus System Monitor tarafından başarıyla gönderildi. Bildirim entegrasyonunuz aktif ve çalışıyor!"
+            : "This notification was successfully sent by Corvus System Monitor. Your notification integration is active and working!";
 
         try
         {
@@ -86,30 +102,30 @@ public class NotificationService : INotificationService
             {
                 case "discord":
                     if (string.IsNullOrWhiteSpace(webhookUrl))
-                        return new NotificationResult(false, "Discord Webhook URL boş olamaz.");
+                        return new NotificationResult(false, isTr ? "Discord Webhook URL boş olamaz." : "Discord Webhook URL cannot be empty.");
                     await SendDiscordAsync(webhookUrl, title, message, isDown: false, ct);
-                    return new NotificationResult(true, "Discord test bildirimi başarıyla gönderildi.");
+                    return new NotificationResult(true, isTr ? "Discord test bildirimi başarıyla gönderildi." : "Discord test notification sent successfully.");
 
                 case "telegram":
                     if (string.IsNullOrWhiteSpace(botToken) || string.IsNullOrWhiteSpace(chatId))
-                        return new NotificationResult(false, "Telegram Bot Token ve Chat ID boş olamaz.");
+                        return new NotificationResult(false, isTr ? "Telegram Bot Token ve Chat ID boş olamaz." : "Telegram Bot Token and Chat ID cannot be empty.");
                     await SendTelegramAsync(botToken, chatId, title, message, ct);
-                    return new NotificationResult(true, "Telegram test bildirimi başarıyla gönderildi.");
+                    return new NotificationResult(true, isTr ? "Telegram test bildirimi başarıyla gönderildi." : "Telegram test notification sent successfully.");
 
                 case "ntfy":
                     if (string.IsNullOrWhiteSpace(webhookUrl))
-                        return new NotificationResult(false, "Ntfy URL / Topic boş olamaz.");
+                        return new NotificationResult(false, isTr ? "Ntfy URL / Topic boş olamaz." : "Ntfy URL / Topic cannot be empty.");
                     await SendNtfyAsync(webhookUrl, title, message, isDown: false, ct);
-                    return new NotificationResult(true, "Ntfy test bildirimi başarıyla gönderildi.");
+                    return new NotificationResult(true, isTr ? "Ntfy test bildirimi başarıyla gönderildi." : "Ntfy test notification sent successfully.");
 
                 case "webhook":
                     if (string.IsNullOrWhiteSpace(webhookUrl))
-                        return new NotificationResult(false, "Webhook URL boş olamaz.");
+                        return new NotificationResult(false, isTr ? "Webhook URL boş olamaz." : "Webhook URL cannot be empty.");
                     await SendGenericWebhookAsync(webhookUrl, "test", title, message, ct);
-                    return new NotificationResult(true, "Generic Webhook test çağrısı başarıyla yapıldı.");
+                    return new NotificationResult(true, isTr ? "Generic Webhook test çağrısı başarıyla yapıldı." : "Generic Webhook test call executed successfully.");
 
                 default:
-                    return new NotificationResult(false, $"Desteklenmeyen bildirim kanalı: {channel}");
+                    return new NotificationResult(false, isTr ? $"Desteklenmeyen bildirim kanalı: {channel}" : $"Unsupported notification channel: {channel}");
             }
         }
         catch (Exception ex)

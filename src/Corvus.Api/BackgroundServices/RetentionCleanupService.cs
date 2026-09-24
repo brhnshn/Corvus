@@ -6,33 +6,69 @@ public class RetentionCleanupService : BackgroundService
 {
     private readonly IServiceProvider _services;
     private readonly ILogger<RetentionCleanupService> _logger;
-    private readonly int _retentionDays;
 
     public RetentionCleanupService(IServiceProvider services, ILogger<RetentionCleanupService> logger)
     {
         _services = services;
         _logger = logger;
-
-        string? envRetention = Environment.GetEnvironmentVariable("CORVUS_METRICS_RETENTION_DAYS");
-        _retentionDays = int.TryParse(envRetention, out int val) && val > 0 ? val : 30;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("RetentionCleanupService başlatıldı (Saklama süresi: {Days} gün).", _retentionDays);
+        _logger.LogInformation("RetentionCleanupService başlatıldı.");
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 using var scope = _services.CreateScope();
+                var settingsRepo = scope.ServiceProvider.GetRequiredService<ISettingsRepository>();
                 var metricsRepo = scope.ServiceProvider.GetRequiredService<IMetricsRepository>();
                 var uptimeRepo = scope.ServiceProvider.GetRequiredService<IUptimeRepository>();
+                var dbFactory = scope.ServiceProvider.GetService<IDbConnectionFactory>();
 
-                _logger.LogInformation("Eski metrik ve uptime kayıtları temizleniyor...");
-                await metricsRepo.CleanupOldAsync(_retentionDays);
-                await uptimeRepo.CleanupOldAsync(_retentionDays);
-                _logger.LogInformation("Eski kayıtların temizliği tamamlandı.");
+                // 1. Veritabanındaki ayarı oku (yoksa ortam değişkeni veya varsayılan 30)
+                int retentionDays = 30;
+                string? rawDays = await settingsRepo.GetAsync("retention_days");
+                if (!string.IsNullOrWhiteSpace(rawDays) && int.TryParse(rawDays, out int parsed))
+                {
+                    retentionDays = parsed;
+                }
+                else
+                {
+                    string? envRetention = Environment.GetEnvironmentVariable("CORVUS_METRICS_RETENTION_DAYS");
+                    if (int.TryParse(envRetention, out int envVal)) retentionDays = envVal;
+                }
+
+                // 2. 0 veya negatif ise Sınırsız mod — temizleme yapma
+                if (retentionDays > 0)
+                {
+                    _logger.LogInformation("Eski metrik ve uptime kayıtları temizleniyor ({Days} gün)...", retentionDays);
+                    await metricsRepo.CleanupOldAsync(retentionDays);
+                    await uptimeRepo.CleanupOldAsync(retentionDays);
+
+                    // SQLite sorgu planlayıcısı istatistiklerini güncelle
+                    if (dbFactory != null)
+                    {
+                        try
+                        {
+                            using var conn = dbFactory.CreateConnection();
+                            using var cmd = conn.CreateCommand();
+                            cmd.CommandText = "PRAGMA optimize;";
+                            cmd.ExecuteNonQuery();
+                        }
+                        catch
+                        {
+                            // Optimize hata verse bile ana akışı kesme
+                        }
+                    }
+
+                    _logger.LogInformation("Eski kayıtların temizliği tamamlandı.");
+                }
+                else
+                {
+                    _logger.LogInformation("Veri saklama süresi 'Sınırsız' (0) olarak ayarlı. Temizlik adımı atlandı.");
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

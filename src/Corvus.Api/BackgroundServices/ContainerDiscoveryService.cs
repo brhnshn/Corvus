@@ -1,4 +1,5 @@
 using Corvus.Api.Data;
+using Corvus.Api.Models;
 using Corvus.Api.Services;
 
 namespace Corvus.Api.BackgroundServices;
@@ -30,7 +31,8 @@ public class ContainerDiscoveryService : BackgroundService
                 if (isDockerUp)
                 {
                     var containers = await docker.GetContainersAsync(stoppingToken);
-                    var activeIds = new List<string>();
+                    var activeIds = new List<string>(containers.Count);
+                    var batchServices = new List<Service>(containers.Count);
 
                     foreach (var c in containers)
                     {
@@ -40,11 +42,10 @@ public class ContainerDiscoveryService : BackgroundService
                         }
 
                         activeIds.Add(c.Id);
-                        var service = docker.MapContainerToService(c);
-                        await repo.UpsertDockerServiceAsync(service);
+                        batchServices.Add(docker.MapContainerToService(c));
                     }
 
-                    await repo.SyncDockerServicesAsync(activeIds);
+                    await repo.SyncDockerBatchAsync(batchServices, activeIds);
                 }
                 else
                 {

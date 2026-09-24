@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { api, type AuthStatus } from '../api/client';
-import { Lock, User, UserPlus, LogIn, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Lock, User, UserPlus, LogIn, AlertCircle, CheckCircle2, Info } from 'lucide-react';
+import { useI18n } from '../i18n';
+import { LanguageSwitch } from '../components/LanguageSwitch';
 
 interface AuthPageProps {
   authStatus: AuthStatus;
@@ -8,6 +10,7 @@ interface AuthPageProps {
 }
 
 export const AuthPage: React.FC<AuthPageProps> = ({ authStatus, onAuthSuccess }) => {
+  const { t } = useI18n();
   const isFirstSetup = !authStatus.hasUsers;
   const [isRegisterMode, setIsRegisterMode] = useState<boolean>(isFirstSetup);
   const [username, setUsername] = useState('');
@@ -23,12 +26,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ authStatus, onAuthSuccess })
     setSuccessMsg(null);
 
     if (!username.trim() || !password) {
-      setError('Lütfen kullanıcı adı ve şifre giriniz.');
+      setError(t('auth.credentialsRequired'));
       return;
     }
 
     if (isRegisterMode && password !== confirmPassword) {
-      setError('Girdiğiniz şifreler birbiriyle eşleşmiyor.');
+      setError(t('auth.passwordsDontMatch'));
       return;
     }
 
@@ -37,7 +40,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ authStatus, onAuthSuccess })
     try {
       if (isRegisterMode) {
         await api.register({ username: username.trim(), password });
-        setSuccessMsg('Kayıt başarılı! Oturum açılıyor...');
+        setSuccessMsg(t('auth.registrationSuccess'));
         setTimeout(() => {
           onAuthSuccess(true);
         }, 600);
@@ -46,14 +49,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({ authStatus, onAuthSuccess })
         onAuthSuccess(false);
       }
     } catch (err: any) {
-      setError(err.message || 'İşlem sırasında bir hata oluştu.');
+      setError(err.message || 'Operation failed');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#0f1117] flex flex-col justify-center items-center p-4 sm:p-6 select-none overflow-y-auto">
+    <div className="min-h-screen bg-[#0f1117] flex flex-col justify-center items-center p-4 sm:p-6 select-none overflow-y-auto relative">
+      <div className="absolute top-4 right-4 z-10">
+        <LanguageSwitch variant="compact" />
+      </div>
+
       <div className="w-full max-w-md bg-[#1a1d29] border border-[#2a2e3f] rounded-2xl p-6 sm:p-8 shadow-2xl my-auto">
         {/* Brand Header */}
         <div className="flex flex-col items-center mb-8">
@@ -67,7 +74,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ authStatus, onAuthSuccess })
           />
           <h1 className="text-2xl font-bold tracking-wider text-[#e5e7eb]">CORVUS</h1>
           <p className="text-xs text-[#9ca3af] tracking-widest font-mono uppercase mt-1">
-            {isFirstSetup ? 'İlk Kurulum & Yönetici Kaydı' : 'Server Launcher & Monitoring'}
+            {isFirstSetup ? t('auth.brandSubtitleSetup') : t('auth.brandSubtitleMain')}
           </p>
         </div>
 
@@ -84,7 +91,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ authStatus, onAuthSuccess })
               }`}
             >
               <LogIn className="w-4 h-4" />
-              Giriş Yap
+              {t('auth.tabLogin')}
             </button>
             <button
               type="button"
@@ -96,7 +103,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ authStatus, onAuthSuccess })
               }`}
             >
               <UserPlus className="w-4 h-4" />
-              Kayıt Ol
+              {t('auth.tabRegister')}
             </button>
           </div>
         )}
@@ -120,7 +127,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ authStatus, onAuthSuccess })
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-[#9ca3af] mb-1.5 uppercase tracking-wider">
-              Kullanıcı Adı
+              {t('auth.usernameLabel')}
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#9ca3af]">
@@ -131,7 +138,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ authStatus, onAuthSuccess })
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="örn. admin"
+                placeholder={t('auth.usernamePlaceholder')}
                 className="w-full pl-10 pr-4 py-2.5 bg-[#0f1117] border border-[#2a2e3f] rounded-lg text-sm text-[#e5e7eb] placeholder-[#9ca3af]/40 focus:outline-none focus:border-[#d4d4d8] transition-colors"
               />
             </div>
@@ -139,7 +146,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ authStatus, onAuthSuccess })
 
           <div>
             <label className="block text-xs font-semibold text-[#9ca3af] mb-1.5 uppercase tracking-wider">
-              Şifre
+              {t('auth.passwordLabel')}
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#9ca3af]">
@@ -159,7 +166,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ authStatus, onAuthSuccess })
           {isRegisterMode && (
             <div>
               <label className="block text-xs font-semibold text-[#9ca3af] mb-1.5 uppercase tracking-wider">
-                Şifre Tekrar
+                {t('auth.confirmPasswordLabel')}
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#9ca3af]">
@@ -187,27 +194,35 @@ export const AuthPage: React.FC<AuthPageProps> = ({ authStatus, onAuthSuccess })
             ) : isRegisterMode ? (
               <>
                 <UserPlus className="w-4 h-4" />
-                <span>Hesap Oluştur</span>
+                <span>{t('auth.registerBtn')}</span>
               </>
             ) : (
               <>
                 <LogIn className="w-4 h-4" />
-                <span>Giriş Yap</span>
+                <span>{t('auth.loginBtn')}</span>
               </>
             )}
           </button>
         </form>
 
         {/* Footer note */}
-        <div className="mt-6 pt-4 border-t border-[#2a2e3f] text-center">
-          <p className="text-[11px] text-[#9ca3af]/60 font-mono">
-            {isFirstSetup 
-              ? '💡 İlk kullanıcı sistem yöneticisi olarak yetkilendirilir.'
-              : !authStatus.registrationEnabled 
-                ? '🔒 Yeni kullanıcı kayıtları sistem yöneticisi tarafından kapatılmıştır.'
-                : '🛡️ Güvenli self-hosted oturum.'}
-          </p>
-        </div>
+        {(isFirstSetup || !authStatus.registrationEnabled) && (
+          <div className="mt-6 pt-4 border-t border-[#2a2e3f] text-center">
+            <p className="text-[11px] text-[#9ca3af]/60 font-mono flex items-center justify-center gap-1.5">
+              {isFirstSetup ? (
+                <>
+                  <Info className="w-3.5 h-3.5 text-[#9ca3af]/80 shrink-0" />
+                  <span>{t('auth.firstUserHint')}</span>
+                </>
+              ) : (
+                <>
+                  <Lock className="w-3.5 h-3.5 text-[#9ca3af]/80 shrink-0" />
+                  <span>{t('auth.regDisabledHint')}</span>
+                </>
+              )}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -11,6 +11,15 @@ public static class DatabaseMigrator
 
         logger.LogInformation("Veritabanı migration kontrolü yapılıyor: {DbPath}", connectionFactory.DatabasePath);
 
+        // WAL modu SQLite'ta kalıcıdır; veritabanı dosyasında 1 kez başlatılması yeterlidir.
+        using (var initConn = new Microsoft.Data.Sqlite.SqliteConnection(connectionString))
+        {
+            initConn.Open();
+            using var walCmd = initConn.CreateCommand();
+            walCmd.CommandText = "PRAGMA journal_mode = WAL;";
+            walCmd.ExecuteNonQuery();
+        }
+
         var upgrader = DeployChanges.To
             .SqliteDatabase(connectionString)
             .WithScriptsEmbeddedInAssembly(Assembly.GetExecutingAssembly())

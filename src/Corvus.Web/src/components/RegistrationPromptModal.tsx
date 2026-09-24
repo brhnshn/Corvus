@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { api } from '../api/client';
 import { ShieldAlert, ShieldCheck, X } from 'lucide-react';
+import { useI18n } from '../i18n';
 
 interface RegistrationPromptModalProps {
   isOpen: boolean;
@@ -14,6 +15,7 @@ export const RegistrationPromptModal: React.FC<RegistrationPromptModalProps> = (
   onDisabled
 }) => {
   const [loading, setLoading] = useState(false);
+  const { t } = useI18n();
 
   if (!isOpen) return null;
 
@@ -24,7 +26,7 @@ export const RegistrationPromptModal: React.FC<RegistrationPromptModalProps> = (
       onDisabled();
       onClose();
     } catch (err: any) {
-      alert(`Hata: ${err.message}`);
+      alert(`${t('common.error')}: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -36,7 +38,8 @@ export const RegistrationPromptModal: React.FC<RegistrationPromptModalProps> = (
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 text-[#9ca3af] hover:text-[#e5e7eb] p-1 rounded-lg transition-colors"
+          className="absolute right-4 top-4 text-[#9ca3af] hover:text-[#e5e7eb] p-1 rounded-lg transition-colors cursor-pointer"
+          title={t('common.close')}
         >
           <X className="w-5 h-5" />
         </button>
@@ -47,20 +50,20 @@ export const RegistrationPromptModal: React.FC<RegistrationPromptModalProps> = (
             <ShieldAlert className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-[#e5e7eb]">Kayıtlar Kapatılsın mı?</h3>
-            <p className="text-xs text-[#9ca3af]">Güvenlik Önerisi</p>
+            <h3 className="text-lg font-bold text-[#e5e7eb]">{t('regModal.title')}</h3>
+            <p className="text-xs text-[#9ca3af]">{t('regModal.subtitle')}</p>
           </div>
         </div>
 
         {/* Content */}
         <p className="text-sm text-[#9ca3af] leading-relaxed mb-6">
-          Corvus hesabınız başarıyla oluşturuldu. Başkalarının panelinize kayıt olmasını engellemek için <strong className="text-[#e5e7eb]">yeni kullanıcı kayıtlarını kapatmanız önerilir</strong>.
+          {t('regModal.desc')}
         </p>
 
         <div className="p-3 bg-[#0f1117] border border-[#2a2e3f] rounded-xl text-xs text-[#9ca3af] mb-6 flex items-start gap-2.5">
           <ShieldCheck className="w-4 h-4 text-[#22c55e] shrink-0 mt-0.5" />
           <span>
-            Bu ayarı dilediğiniz zaman sol menüdeki <strong className="text-[#e5e7eb]">Ayarlar</strong> sayfasından tekrar açabilir veya kapatabilirsiniz.
+            {t('regModal.hint')}
           </span>
         </div>
 
@@ -70,22 +73,22 @@ export const RegistrationPromptModal: React.FC<RegistrationPromptModalProps> = (
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="px-4 py-2 text-xs font-semibold text-[#9ca3af] hover:text-[#e5e7eb] hover:bg-[#2a2e3f]/50 rounded-lg transition-colors"
+            className="px-4 py-2 text-xs font-semibold text-[#9ca3af] hover:text-[#e5e7eb] hover:bg-[#2a2e3f]/50 rounded-lg transition-colors cursor-pointer"
           >
-            Açık Bırak
+            {t('regModal.keepOpenBtn')}
           </button>
           <button
             type="button"
             onClick={handleDisableRegistration}
             disabled={loading}
-            className="px-4 py-2 bg-[#d4d4d8] hover:bg-[#e4e4e7] text-[#0f1117] text-xs font-bold rounded-lg transition-colors shadow flex items-center gap-1.5"
+            className="px-4 py-2 bg-[#d4d4d8] hover:bg-[#e4e4e7] text-[#0f1117] text-xs font-bold rounded-lg transition-colors shadow flex items-center gap-1.5 cursor-pointer"
           >
             {loading ? (
               <span className="inline-block w-3.5 h-3.5 border-2 border-[#0f1117] border-t-transparent rounded-full animate-spin" />
             ) : (
               <>
                 <ShieldAlert className="w-3.5 h-3.5" />
-                <span>Kayıtları Kapat</span>
+                <span>{t('regModal.disableBtn')}</span>
               </>
             )}
           </button>

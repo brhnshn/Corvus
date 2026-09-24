@@ -30,16 +30,16 @@ corvus/
 │   │   │   ├── ContainersEndpoints.cs    # Containers, /stats, /logs, /logs/stream ve lifecycle kontrolleri
 │   │   │   ├── MetricsEndpoints.cs       # Sistem metrikleri zaman serisi
 │   │   │   ├── UptimeEndpoints.cs        # Servis uptime geçmişi
-│   │   │   ├── PushEndpoints.cs          # Push webhooks ve Dead Man's Snitch (/push-monitors)
+│   │   │   ├── PushEndpoints.cs          # Push webhooks, /backup/download ve Dead Man's Snitch (/push-monitors)
 │   │   │   ├── NotificationEndpoints.cs  # Çok kanallı alarm test uç noktası
 │   │   │   ├── StreamEndpoints.cs        # Canlı SSE olay akışı (/api/stream/events)
-│   │   │   ├── DashboardEndpoints.cs     # Dashboard KPI özeti
+│   │   │   ├── DashboardEndpoints.cs     # Dashboard KPI özeti, /api/settings, /api/settings/db-stats
 │   │   │   └── AuthEndpoints.cs          # Session auth, kayıt yönetimi ve Zero-Trust SSO
 │   │   ├── BackgroundServices/    # Arka plan çalışan iş parçacıkları
 │   │   │   ├── ContainerDiscoveryService.cs  # Docker socket periyodik konteyner senkronizasyonu
 │   │   │   ├── SystemMetricsCollector.cs     # Host CPU/RAM/Disk/Net metrik toplayıcısı
 │   │   │   ├── UptimeCheckerService.cs       # HTTP/TCP ping, SSL sertifika ve Snitch denetimi
-│   │   │   └── RetentionCleanupService.cs    # Zaman aşımına uğrayan kayıtları temizleme (24h)
+│   │   │   └── RetentionCleanupService.cs    # Dinamik veri saklama temizleyicisi & PRAGMA optimize (24h)
 │   │   ├── Data/                  # Veri erişim katmanı (Dapper.AOT + SQLite)
 │   │   │   ├── DbConnectionFactory.cs        # SQLite WAL, busy_timeout=5000 ve PRAGMA optimizasyonları
 │   │   │   ├── DatabaseMigrator.cs           # DbUp göç yöneticisi
@@ -53,7 +53,8 @@ corvus/
 │   │   │   └── Migrations/                   # Sıralı göç SQL dosyaları
 │   │   │       ├── 001_init.sql
 │   │   │       ├── 002_add_users.sql
-│   │   │       └── 003_roadmap_features.sql
+│   │   │       ├── 003_roadmap_features.sql
+│   │   │       └── 004_performance_indexes.sql
 │   │   ├── Models/                 # DTO'lar ve Veritabanı Varlıkları
 │   │   │   ├── Service.cs                    # Servis modeli (check_type, port, ssl, is_public, display_order)
 │   │   │   ├── ServiceOverride.cs            # Docker override modeli
@@ -68,7 +69,7 @@ corvus/
 │   │       ├── DockerHttpClient.cs           # SocketsHttpHandler ile Docker REST istemcisi
 │   │       ├── DockerService.cs              # Konteyner işlemleri ve etiket eşleme
 │   │       ├── DockerLogDemuxer.cs           # Multiplexed Docker log akış ayrıştırıcısı
-│   │       ├── NotificationService.cs        # Discord, Telegram, Ntfy ve Webhook alarm motoru
+│   │       ├── NotificationService.cs        # Çift dilli Discord, Telegram, Ntfy ve Webhook alarm motoru
 │   │       ├── EventBroadcaster.cs           # Bounded Channel SSE olay yayıncısı
 │   │       └── AuthService.cs                # Zero-Trust SSO proxy headers & SHA-256 session auth
 │   │
@@ -77,17 +78,23 @@ corvus/
 │       ├── src/
 │       │   ├── main.tsx
 │       │   ├── App.tsx             # React.lazy rota kod ayrıştırma (code-splitting) & SSE bağlantısı
+│       │   ├── i18n/               # Derleme anında tip güvenli çoklu dil sistemi
+│       │   │   ├── en.ts           # Birincil İngilizce sözlük
+│       │   │   ├── tr.ts           # Türkçe çeviri sözlüğü
+│       │   │   ├── types.ts        # DeepStringify ve sözlük tipleri
+│       │   │   └── index.tsx       # I18nProvider ve useI18n hook'u
 │       │   ├── pages/              # Uygulama ve Durum Sayfaları
 │       │   │   ├── Dashboard.tsx        # KPI özeti ve anlık durum
 │       │   │   ├── Services.tsx         # Servis launcher, sıralama ve SSL rozetleri
 │       │   │   ├── Containers.tsx       # Canlı stats, Compose stack gruplama, yaşam döngüsü
 │       │   │   ├── SystemMetrics.tsx    # Recharts host zaman serisi
 │       │   │   ├── Uptime.tsx           # Uptime grafikleri ve Dead Man's Snitch sekmesi
-│       │   │   ├── Settings.tsx         # Çok kanallı alarm ayarları ve kullanıcı tercihleri
+│       │   │   ├── Settings.tsx         # Sekmeli alarmlar, çift yönlü yedekleme, esnek retention ve DB boyutu
 │       │   │   ├── AuthPage.tsx         # Giriş ve kayıt ekranı
 │       │   │   └── PublicStatus.tsx     # Şifresiz halka açık durum sayfası (/status)
 │       │   ├── components/         # Ortak bileşenler
 │       │   │   ├── Sidebar.tsx          # Masaüstü kalıcı, mobil/tablet slide-over drawer
+│       │   │   ├── LanguageSwitch.tsx   # Kompakt ve tam modlu arayüz dil değiştirici
 │       │   │   ├── ContainerLogsModal.tsx # Canlı log terminal modalı
 │       │   │   ├── RegistrationPromptModal.tsx
 │       │   │   └── StatusBadge.tsx
@@ -96,7 +103,7 @@ corvus/
 │       └── wwwroot/                # Derlenmiş statik dosyaların çıktığı yer
 │
 ├── tests/
-│   └── Corvus.Api.Tests/           # xUnit Test Projesi (34 Test)
+│   └── Corvus.Api.Tests/           # xUnit Test Projesi (60 Test)
 │       ├── AuthServiceTests.cs
 │       ├── DockerServiceTests.cs
 │       ├── DockerLogDemuxerTests.cs

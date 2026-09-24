@@ -13,6 +13,14 @@ public class UptimeCheckerService : BackgroundService
     private readonly ILogger<UptimeCheckerService> _logger;
     private readonly IEventBroadcaster _eventBroadcaster;
     private readonly ConcurrentDictionary<string, string> _lastKnownStatus = new();
+    private static readonly HttpRequestOptionsKey<SslInfoHolder> SslInfoKey = new("Corvus_SslInfo");
+    private readonly HttpClient _httpClient;
+
+    private class SslInfoHolder
+    {
+        public int? SslDays { get; set; }
+        public string? SslIssuer { get; set; }
+    }
 
     public UptimeCheckerService(
         IServiceProvider services, 
@@ -22,6 +30,21 @@ public class UptimeCheckerService : BackgroundService
         _services = services;
         _logger = logger;
         _eventBroadcaster = eventBroadcaster;
+
+        var handler = new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (message, cert, chain, errors) =>
+            {
+                if (message.Options.TryGetValue(SslInfoKey, out var holder) && cert != null)
+                {
+                    holder.SslDays = (int)Math.Max(0, (cert.NotAfter - DateTime.UtcNow).TotalDays);
+                    holder.SslIssuer = cert.Issuer;
+                }
+                return true;
+            }
+        };
+
+        _httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -103,27 +126,13 @@ public class UptimeCheckerService : BackgroundService
                     else
                     {
                         // 1.4: HTTP / HTTPS Check & SSL Expiration Tracking
-                        int? sslDays = null;
-                        string? sslIssuer = null;
-
-                        var handler = new HttpClientHandler
-                        {
-                            ServerCertificateCustomValidationCallback = (message, cert, chain, errors) =>
-                            {
-                                if (cert != null)
-                                {
-                                    sslDays = (int)Math.Max(0, (cert.NotAfter - DateTime.UtcNow).TotalDays);
-                                    sslIssuer = cert.Issuer;
-                                }
-                                return true;
-                            }
-                        };
-
-                        using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+                        var sslHolder = new SslInfoHolder();
+                        using var request = new HttpRequestMessage(HttpMethod.Get, targetUrl!);
+                        request.Options.Set(SslInfoKey, sslHolder);
 
                         try
                         {
-                            var response = await httpClient.GetAsync(targetUrl!, stoppingToken);
+                            var response = await _httpClient.SendAsync(request, stoppingToken);
                             sw.Stop();
                             check.ResponseTimeMs = (int)sw.ElapsedMilliseconds;
 
@@ -145,12 +154,12 @@ public class UptimeCheckerService : BackgroundService
                             check.ErrorMessage = ex.Message;
                         }
 
-                        if (sslDays.HasValue)
+                        if (sslHolder.SslDays.HasValue)
                         {
-                            await servicesRepo.UpdateSslInfoAsync(s.Id, sslDays.Value, sslIssuer);
-                            if (sslDays.Value <= 14)
+                            await servicesRepo.UpdateSslInfoAsync(s.Id, sslHolder.SslDays.Value, sslHolder.SslIssuer);
+                            if (sslHolder.SslDays.Value <= 14)
                             {
-                                _logger.LogWarning("SSL sertifikası yakında bitiyor: Servis {ServiceName}, Kalan Gün: {Days}", s.Name, sslDays.Value);
+                                _logger.LogWarning("SSL sertifikası yakında bitiyor: Servis {ServiceName}, Kalan Gün: {Days}", s.Name, sslHolder.SslDays.Value);
                             }
                         }
                     }
@@ -218,5 +227,11 @@ public class UptimeCheckerService : BackgroundService
         }
 
         _logger.LogInformation("UptimeCheckerService durduruldu.");
+    }
+
+    public override void Dispose()
+    {
+        _httpClient.Dispose();
+        base.Dispose();
     }
 }

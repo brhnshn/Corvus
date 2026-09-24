@@ -30,16 +30,16 @@ corvus/
 │   │   │   ├── ContainersEndpoints.cs    # Containers, /stats, /logs, /logs/stream, and lifecycle controls
 │   │   │   ├── MetricsEndpoints.cs       # Host system metrics time-series
 │   │   │   ├── UptimeEndpoints.cs        # Service uptime check history
-│   │   │   ├── PushEndpoints.cs          # Push webhooks and Dead Man's Snitch (/push-monitors)
+│   │   │   ├── PushEndpoints.cs          # Push webhooks, /backup/download, and Dead Man's Snitch (/push-monitors)
 │   │   │   ├── NotificationEndpoints.cs  # Multi-channel alert test endpoint
 │   │   │   ├── StreamEndpoints.cs        # Live Server-Sent Events stream (/api/stream/events)
-│   │   │   ├── DashboardEndpoints.cs     # Dashboard aggregated KPI summary
+│   │   │   ├── DashboardEndpoints.cs     # Dashboard aggregated KPI summary, /api/settings, /api/settings/db-stats
 │   │   │   └── AuthEndpoints.cs          # Session auth, registration toggle, and Zero-Trust SSO
 │   │   ├── BackgroundServices/    # Continuous background worker threads
 │   │   │   ├── ContainerDiscoveryService.cs  # Docker socket periodic container discovery (10s)
 │   │   │   ├── SystemMetricsCollector.cs     # Host CPU/RAM/Disk/Net metrics sampler (15s)
 │   │   │   ├── UptimeCheckerService.cs       # HTTP/TCP ping, SSL cert tracking, and Snitch checks (60s)
-│   │   │   └── RetentionCleanupService.cs    # Rolling window data cleanup (24h)
+│   │   │   └── RetentionCleanupService.cs    # Dynamic retention data cleanup & PRAGMA optimize (24h)
 │   │   ├── Data/                  # Persistence and data access layer (Dapper.AOT + SQLite)
 │   │   │   ├── DbConnectionFactory.cs        # SQLite WAL, busy_timeout=5000, and PRAGMA tuning
 │   │   │   ├── DatabaseMigrator.cs           # DbUp sequential migration runner
@@ -53,7 +53,8 @@ corvus/
 │   │   │   └── Migrations/                   # Ordered migration SQL scripts
 │   │   │       ├── 001_init.sql
 │   │   │       ├── 002_add_users.sql
-│   │   │       └── 003_roadmap_features.sql
+│   │   │       ├── 003_roadmap_features.sql
+│   │   │       └── 004_performance_indexes.sql
 │   │   ├── Models/                 # DTOs and Database Entities
 │   │   │   ├── Service.cs                    # Service entity (check_type, port, ssl, is_public, display_order)
 │   │   │   ├── ServiceOverride.cs            # Docker label override model
@@ -68,7 +69,7 @@ corvus/
 │   │       ├── DockerHttpClient.cs           # SocketsHttpHandler direct socket client
 │   │       ├── DockerService.cs              # Container operations, stats, and label parsing
 │   │       ├── DockerLogDemuxer.cs           # Zero-alloc multiplexed Docker stdout/stderr demuxer
-│   │       ├── NotificationService.cs        # Multi-channel alert dispatcher (Discord, Telegram, Ntfy, Webhook)
+│   │       ├── NotificationService.cs        # Bilingual multi-channel alert dispatcher (Discord, Telegram, Ntfy, Webhook)
 │   │       ├── EventBroadcaster.cs           # Bounded Channel SSE real-time event publisher
 │   │       └── AuthService.cs                # Zero-Trust SSO proxy headers & SHA-256 session auth
 │   │
@@ -77,17 +78,23 @@ corvus/
 │       ├── src/
 │       │   ├── main.tsx
 │       │   ├── App.tsx             # React.lazy route code-splitting & SSE streaming listener
+│       │   ├── i18n/               # Compile-time type-safe multi-language system
+│       │   │   ├── en.ts           # Primary English dictionary
+│       │   │   ├── tr.ts           # Turkish translation dictionary
+│       │   │   ├── types.ts        # DeepStringify and schema types
+│       │   │   └── index.tsx       # I18nProvider and useI18n hook
 │       │   ├── pages/              # Application pages and status views
 │       │   │   ├── Dashboard.tsx        # Aggregated KPI overview and live activity
 │       │   │   ├── Services.tsx         # Service catalog launcher, reordering, and SSL badges
 │       │   │   ├── Containers.tsx       # Live stats, Compose project accordion, lifecycle actions
 │       │   │   ├── SystemMetrics.tsx    # Recharts hardware utilization charts
 │       │   │   ├── Uptime.tsx           # Uptime history and Dead Man's Snitch tab
-│       │   │   ├── Settings.tsx         # Alert channel setup and user preferences
+│       │   │   ├── Settings.tsx         # Tabbed alerts, dual backups, flexible retention, and DB telemetry
 │       │   │   ├── AuthPage.tsx         # Sign in and initial registration view
 │       │   │   └── PublicStatus.tsx     # Unauthenticated public status page (/status)
 │       │   ├── components/         # Shared UI components
 │       │   │   ├── Sidebar.tsx          # Responsive desktop rail and mobile/tablet slide-over drawer
+│       │   │   ├── LanguageSwitch.tsx   # Compact & full interface language switcher
 │       │   │   ├── ContainerLogsModal.tsx # Terminal modal for live container logs
 │       │   │   ├── RegistrationPromptModal.tsx
 │       │   │   └── StatusBadge.tsx
@@ -96,7 +103,7 @@ corvus/
 │       └── wwwroot/                # Production compiled bundle output
 │
 ├── tests/
-│   └── Corvus.Api.Tests/           # xUnit Test Suite (34 Passing Tests)
+│   └── Corvus.Api.Tests/           # xUnit Test Suite (60 Passing Tests)
 │       ├── AuthServiceTests.cs
 │       ├── DockerServiceTests.cs
 │       ├── DockerLogDemuxerTests.cs

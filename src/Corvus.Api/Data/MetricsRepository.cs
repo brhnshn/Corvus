@@ -32,15 +32,36 @@ public class MetricsRepository : IMetricsRepository
 
     public async Task<List<SystemMetric>> GetRecentAsync(string range = "24h")
     {
-        int hours = range switch
+        int hours;
+        int step;
+
+        switch (range)
         {
-            "1h" => 1,
-            "6h" => 6,
-            "12h" => 12,
-            "24h" => 24,
-            "7d" => 24 * 7,
-            _ => 24
-        };
+            case "1h":
+                hours = 1;
+                step = 1; // Tüm noktalar (~240 nokta)
+                break;
+            case "6h":
+                hours = 6;
+                step = 4; // her 1 dakikada 1 nokta (~360 nokta)
+                break;
+            case "12h":
+                hours = 12;
+                step = 10; // her 2.5 dakikada 1 nokta (~288 nokta)
+                break;
+            case "24h":
+                hours = 24;
+                step = 20; // her 5 dakikada 1 nokta (~288 nokta)
+                break;
+            case "7d":
+                hours = 24 * 7;
+                step = 120; // her 30 dakikada 1 nokta (~336 nokta)
+                break;
+            default:
+                hours = 24;
+                step = 20;
+                break;
+        }
 
         string cutoff = DateTime.UtcNow.AddHours(-hours).ToString("o");
 
@@ -50,11 +71,15 @@ public class MetricsRepository : IMetricsRepository
                    ram_used_mb AS RamUsedMb, ram_total_mb AS RamTotalMb, 
                    disk_used_gb AS DiskUsedGb, disk_total_gb AS DiskTotalGb, 
                    network_rx_bytes AS NetworkRxBytes, network_tx_bytes AS NetworkTxBytes
-            FROM system_metrics
-            WHERE recorded_at >= @cutoff
-            ORDER BY recorded_at ASC";
+            FROM (
+                SELECT *, ROW_NUMBER() OVER (ORDER BY id ASC) AS row_num
+                FROM system_metrics
+                WHERE recorded_at >= @cutoff
+            )
+            WHERE (row_num - 1) % @step = 0
+            ORDER BY id ASC";
 
-        var rows = await conn.QueryAsync<SystemMetric>(sql, new { cutoff });
+        var rows = await conn.QueryAsync<SystemMetric>(sql, new { cutoff, step });
         return rows.AsList();
     }
 
@@ -75,6 +100,7 @@ public class MetricsRepository : IMetricsRepository
 
     public async Task CleanupOldAsync(int retentionDays)
     {
+        if (retentionDays <= 0) return;
         string cutoff = DateTime.UtcNow.AddDays(-retentionDays).ToString("o");
         using var conn = _db.CreateConnection();
         await conn.ExecuteAsync("DELETE FROM system_metrics WHERE recorded_at < @cutoff", new { cutoff });

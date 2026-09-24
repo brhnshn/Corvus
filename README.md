@@ -13,7 +13,8 @@
   <img src="https://img.shields.io/badge/RAM_Usage-%3C30_MB-success" alt="RAM <30MB" />
   <img src="https://img.shields.io/badge/Frontend-React_19_+_Vite_+_Tailwind-61DAFB?logo=react" alt="React" />
   <img src="https://img.shields.io/badge/Database-SQLite_+_Dapper.AOT-003B57?logo=sqlite" alt="SQLite" />
-  <img src="https://img.shields.io/badge/Tests-54_Passing-brightgreen" alt="Tests" />
+  <img src="https://img.shields.io/badge/Tests-60_Passing-brightgreen" alt="Tests" />
+  <img src="https://img.shields.io/badge/i18n-English_%7C_T%C3%BCrk%C3%A7e-blue" alt="i18n" />
   <img src="https://img.shields.io/badge/License-MIT-blue" alt="License" />
 </p>
 
@@ -32,10 +33,22 @@
 
 ## ✨ Key Features
 
+- **🌍 Fully Bilingual & Compile-Time i18n:**
+  - Native React 19 Context with zero external library overhead (~1.2 KB) and compile-time type safety (`DeepStringify`).
+  - English (`en`) as default, Turkish (`tr`) fully supported with one-click seamless switcher.
+  - Outbound alerts (Discord, Telegram, Ntfy, Webhooks) synchronized to the configured system language.
 - **🚀 Dual-Mode Service Launcher:**
   - **Automatic Discovery:** Detects Docker containers via direct Docker socket communication (`/var/run/docker.sock`), extracting Glance-style metadata (`corvus.name`, `corvus.category`, `corvus.url`, etc.).
   - **Manual Services:** Add external URLs, bare-metal endpoints, IoT devices, or local services.
   - **Visual Reordering:** Drag & drop / up-down service ordering with persistent `display_order`.
+- **💾 Dual-Mode Backup Management & Disaster Recovery:**
+  - **Internal Snapshot Download:** One-click SQLite `VACUUM INTO` point-in-time database snapshot download (`GET /api/backup/download`), lock-free and instantly updating Dashboard stats via SSE.
+  - **External Backup Push:** Easy integration for host backup tools (`restic`, `borg`, cron) with dynamic token generator and auto-configured `curl` snippets.
+- **🧹 Flexible Data Retention & Storage Telemetry:**
+  - Configurable retention presets: 7d, 15d, 30d (recommended), 60d, 90d, 180d, 365d, or **Unlimited (0)**.
+  - Informative disk-growth advisories when selecting Unlimited mode.
+  - Real-time database disk footprint tracking (`GET /api/settings/db-stats`).
+  - Dynamic background cleaner (`RetentionCleanupService`) with SQLite `PRAGMA optimize;`.
 - **🪵 Real-Time Container Log Streaming:**
   - Zero-allocation multiplexed demuxer (`DockerLogDemuxer.cs`) for Docker stdout/stderr streams.
   - Real-time Server-Sent Events (`/api/containers/{id}/logs/stream`) with dark monospace terminal modal, keyword filtering, and auto-scroll.
@@ -44,8 +57,8 @@
   - Lifecycle actions: **Start**, **Stop**, **Pause**, **Unpause**, and **Restart** with confirmation modals.
   - **Compose Stack Grouping:** Toggle between flat list and collapsible Docker Compose projects (`com.docker.compose.project`).
 - **🔔 Multi-Channel Alerting Engine:**
-  - Instant state transition alerts (Down 🔴 / Recovered 🟢) sent to **Discord**, **Telegram**, **Ntfy / Gotify**, and **Generic Webhooks**.
-  - One-click test notification dispatcher in Settings.
+  - Tabbed notification configuration: **Discord**, **Telegram**, **Ntfy / Gotify**, and **Generic Webhooks**.
+  - Configurable notification triggers (`notify_service_events`) and one-click test notification dispatcher.
 - **⏱️ Extended Endpoint Uptime & SSL Tracking:**
   - **HTTP/HTTPS & TCP Port Ping:** Socket-level connection test for non-HTTP services (databases, SSH, game servers).
   - **SSL Certificate Expiration:** Auto-tracks SSL remaining days and issuer; triggers alert if expiration is within 14 days.
@@ -61,7 +74,8 @@
 - **📱 Responsive Mobile & Tablet First:**
   - Slide-over drawer navigation, sticky mobile header, and dual-mode responsive tables/cards.
 - **⚡ Performance & Optimization:**
-  - SQLite WAL mode with `PRAGMA busy_timeout = 5000;`, `PRAGMA temp_store = MEMORY;`.
+  - SQLite WAL mode with `PRAGMA busy_timeout = 5000;`, `PRAGMA synchronous = NORMAL;`, `PRAGMA temp_store = MEMORY;`.
+  - Composite indexes on time-series telemetry tables (`004_performance_indexes.sql`).
   - Route code-splitting via `React.lazy` and Vite `manualChunks` (initial bundle <200 KB).
 
 ---
@@ -82,7 +96,7 @@ Corvus Architecture:
 │       ASP.NET Core Minimal API (.NET 9 Native AOT)     │
 ├───────────────────────────┬────────────────────────────┤
 │  Docker REST API Client   │  SQLite + Dapper.AOT       │
-│  (SocketsHttpHandler)     │  (DbUp Migrations 001-003) │
+│  (SocketsHttpHandler)     │  (DbUp Migrations 001-004) │
 ├───────────────────────────┴────────────────────────────┤
 │  Core Services:                                        │
 │  - DockerLogDemuxer (Zero-alloc multiplexed demuxer)   │
@@ -174,6 +188,10 @@ labels:
 | `GET /api/push-monitors` | List Dead Man's Snitch periodic push monitors |
 | `POST /api/push-monitors` | Create new Dead Man's Snitch monitor |
 | `POST /api/push/{token}` | Push webhook ping for backups and cron jobs |
+| `GET /api/backup/download` | Lock-free internal SQLite database snapshot download (`.db`) |
+| `GET /api/settings/db-stats` | Real-time SQLite database & WAL disk size telemetry |
+| `GET /api/settings` | Retrieve all system settings |
+| `PUT /api/settings` | Update system configuration parameters |
 | `POST /api/notifications/test` | Test alert dispatch (Discord, Telegram, Ntfy, Webhook) |
 | `GET /api/stream/events` | Server-Sent Events live status stream |
 | `GET /api/auth/status` | Current session & Zero-Trust SSO detection |

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useI18n } from '../i18n';
 
 interface StatusBadgeProps {
   status: 'healthy' | 'degraded' | 'down' | 'unknown' | string;
@@ -6,30 +7,32 @@ interface StatusBadgeProps {
 }
 
 export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, className = '' }) => {
+  const { t } = useI18n();
+
   const config = {
     healthy: {
-      label: 'Çalışıyor',
+      label: t('status.healthy'),
       color: 'bg-[#22c55e]',
       text: 'text-[#22c55e]',
       border: 'border-[#22c55e]/30',
       bg: 'bg-[#22c55e]/10'
     },
     degraded: {
-      label: 'Uyarı',
+      label: t('status.degraded'),
       color: 'bg-[#f59e0b]',
       text: 'text-[#f59e0b]',
       border: 'border-[#f59e0b]/30',
       bg: 'bg-[#f59e0b]/10'
     },
     down: {
-      label: 'Durduruldu',
+      label: t('status.down'),
       color: 'bg-[#ef4444]',
       text: 'text-[#ef4444]',
       border: 'border-[#ef4444]/30',
       bg: 'bg-[#ef4444]/10'
     },
     unknown: {
-      label: 'Bilinmiyor',
+      label: t('status.unknown'),
       color: 'bg-[#6b7280]',
       text: 'text-[#6b7280]',
       border: 'border-[#6b7280]/30',

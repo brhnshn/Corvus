@@ -55,24 +55,19 @@ public static class ServicesEndpoints
             return Results.Ok(new GenericApiResponse(true, "Servis sıralaması güncellendi."));
         });
 
-        // 1.6: Halka Açık / Şifresiz Durum Sayfası Uç Noktası
+        // 1.6: Halka Açık / Şifresiz Durum Sayfası Uç Noktası (N+1 engellenmiş tekil SQL agregasyonu)
         app.MapGet("/api/status-page", async (IServicesRepository repo, IUptimeRepository uptimeRepo) =>
         {
             var publicServices = await repo.GetPublicServicesAsync();
-            var serviceDtos = new List<PublicServiceDto>();
+            var uptimePercentages = await uptimeRepo.Get24hUptimePercentagesAsync();
+            var serviceDtos = new List<PublicServiceDto>(publicServices.Count);
 
             int downCount = 0;
             int degradedCount = 0;
 
             foreach (var s in publicServices)
             {
-                var recentChecks = await uptimeRepo.GetByServiceAsync(s.Id, "24h");
-                double uptimePct = 100.0;
-                if (recentChecks.Count > 0)
-                {
-                    int upCount = recentChecks.Count(c => c.Status == "up");
-                    uptimePct = Math.Round((double)upCount / recentChecks.Count * 100.0, 1);
-                }
+                double uptimePct = uptimePercentages.TryGetValue(s.Id, out double pct) ? pct : 100.0;
 
                 if (s.Status == "down") downCount++;
                 else if (s.Status == "degraded") degradedCount++;
@@ -87,7 +82,7 @@ public static class ServicesEndpoints
                     Status: s.Status,
                     SslExpiryDays: s.SslExpiryDays,
                     UptimePercentage: uptimePct,
-                    RecentChecks: recentChecks
+                    RecentChecks: []
                 ));
             }
 

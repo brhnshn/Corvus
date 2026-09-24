@@ -13,7 +13,8 @@
   <img src="https://img.shields.io/badge/RAM_T%C3%BCketimi-%3C30_MB-success" alt="RAM <30MB" />
   <img src="https://img.shields.io/badge/Frontend-React_19_+_Vite_+_Tailwind-61DAFB?logo=react" alt="React" />
   <img src="https://img.shields.io/badge/Veritaban%C4%B1-SQLite_+_Dapper.AOT-003B57?logo=sqlite" alt="SQLite" />
-  <img src="https://img.shields.io/badge/Testler-54_Ba%C5%9Far%C4%B1l%C4%B1-brightgreen" alt="Tests" />
+  <img src="https://img.shields.io/badge/Testler-60_Ba%C5%9Far%C4%B1l%C4%B1-brightgreen" alt="Tests" />
+  <img src="https://img.shields.io/badge/i18n-%C4%B0ngilizce_%7C_T%C3%BCrk%C3%A7e-blue" alt="i18n" />
   <img src="https://img.shields.io/badge/Lisans-MIT-blue" alt="License" />
 </p>
 
@@ -32,10 +33,22 @@
 
 ## ✨ Temel Özellikler
 
+- **🌍 Çift Dilli & Compile-Time Çoklu Dil (i18n):**
+  - Harici kütüphane ek yükü olmayan (~1.2 KB), derleme anında tip korumalı (`DeepStringify`) yerli React 19 Context.
+  - Varsayılan İngilizce (`en`), %100 eksiksiz Türkçe (`tr`) ve anında geçiş sağlayan dil seçici.
+  - Arka plan bildirim kanallarının (Discord, Telegram, Ntfy, Webhook) seçili sistem diline göre otomatik senkronizasyonu.
 - **🚀 Çift Modlu Servis Başlatıcı:**
   - **Otomatik Keşif:** Docker socket (`/var/run/docker.sock`) üzerinden doğrudan konteynerleri tespit eder ve etiketleri (`corvus.name`, `corvus.category`, `corvus.url` vb.) okur.
   - **Manuel Servisler:** Harici URL'leri, yerel servisleri veya IoT uç noktalarını el ile tanımlayabilme.
   - **Görsel Sıralama:** Servisleri yukarı/aşağı butonlarıyla kalıcı olarak sıralayabilme (`display_order`).
+- **💾 Çift Yönlü Yedekleme Yönetimi & Felaket Kurtarma:**
+  - **Dahili Anlık Yedekleme İndirme:** Kilitlenmesiz, tutarlı SQLite `VACUUM INTO` veritabanı yedeğini tek tıkla indirme (`GET /api/backup/download`) ve Dashboard istatistiklerini SSE ile canlı güncelleme.
+  - **Harici Yedekleme Bildirimi:** Dinamik token oluşturucu ve otomatik yapılandırılmış `curl` şablonları ile host yedekleme araçları (`restic`, `borg`, cron) entegrasyonu.
+- **🧹 Esnek Veri Saklama Süresi & Disk Telemetrisi:**
+  - Hazır saklama periyotları: 7 gün, 15 gün, 30 gün (önerilen), 60 gün, 90 gün, 180 gün, 365 gün veya **Sınırsız (0)**.
+  - Sınırsız mod seçildiğinde disk büyümesi ve yedekleme süresi hakkında bilgilendirici akıllı uyarı.
+  - SQLite dosya ve WAL boyutunu canlı takip etme (`GET /api/settings/db-stats`).
+  - Veritabanı ayarını dinamik dinleyen ve temizlik sonrası `PRAGMA optimize;` çalıştıran `RetentionCleanupService`.
 - **🪵 Gerçek Zamanlı Konteyner Log Akışı:**
   - Docker stdout/stderr akışları için sıfır bellek ayırmalı (zero-alloc) ayrıştırıcı (`DockerLogDemuxer.cs`).
   - Koyu temalı terminal modalı, anahtar kelime filtreleme ve otomatik kaydırma ile Server-Sent Events (`/api/containers/{id}/logs/stream`) akışı.
@@ -44,8 +57,8 @@
   - Yaşam döngüsü aksiyonları: Onay modalları ile **Start**, **Stop**, **Pause**, **Unpause** ve **Restart**.
   - **Compose Stack Gruplaması:** Düz liste ile katlanabilir Docker Compose projeleri (`com.docker.compose.project`) arasında tek tıkla geçiş.
 - **🔔 Çok Kanallı Alarm Motoru:**
-  - Servis çöktüğünde (Down 🔴) veya düzeldiğinde (Recovered 🟢) anında **Discord**, **Telegram**, **Ntfy / Gotify** ve **Özel Webhook** bildirimleri.
-  - Ayarlar sayfasından tek tıkla test bildirimleri gönderme.
+  - Sekmeli yapılandırma: **Discord**, **Telegram**, **Ntfy / Gotify** ve **Özel Webhook** kanalları.
+  - Özelleştirilebilir olay tetikleyicileri (`notify_service_events`) ve tek tıkla test bildirimi gönderme.
 - **⏱️ Genişletilmiş Uptime & SSL Takibi:**
   - **HTTP/HTTPS & TCP Port Ping:** Veritabanları, SSH veya oyun sunucuları gibi HTTP dışı servisler için soket seviyesinde bağlantı testi.
   - **SSL Sertifika Bitiş Süresi:** SSL kalan gün sayısını ve sertifika sağlayıcısını otomatik takip eder; bitime 14 gün kala uyarı üretir.
@@ -61,7 +74,8 @@
 - **📱 Mobil ve Tablet Uyumlu Arayüz:**
   - Slide-over drawer menüsü, sabit mobil üst başlık, duyarlı tablo ve kart görünümleri.
 - **⚡ Yüksek Performans & Optimizasyon:**
-  - SQLite WAL modu, `PRAGMA busy_timeout = 5000;`, `PRAGMA temp_store = MEMORY;`.
+  - SQLite WAL modu, `PRAGMA busy_timeout = 5000;`, `PRAGMA synchronous = NORMAL;`, `PRAGMA temp_store = MEMORY;`.
+  - Zaman serisi telemetri tablolarında kompozit performans indeksleri (`004_performance_indexes.sql`).
   - `React.lazy` ve Vite `manualChunks` ile kod ayrıştırma (ilk paket boyutu <200 KB).
 
 ---
@@ -82,7 +96,7 @@ Corvus Mimarisi:
 │       ASP.NET Core Minimal API (.NET 9 Native AOT)     │
 ├───────────────────────────┬────────────────────────────┤
 │  Docker REST API Client   │  SQLite + Dapper.AOT       │
-│  (SocketsHttpHandler)     │  (DbUp Migrations 001-003) │
+│  (SocketsHttpHandler)     │  (DbUp Migrations 001-004) │
 ├───────────────────────────┴────────────────────────────┤
 │  Çekirdek Servisler:                                   │
 │  - DockerLogDemuxer (Sıfır bellek tahsisli log demux)  │
@@ -174,6 +188,10 @@ labels:
 | `GET /api/push-monitors` | Dead Man's Snitch monitörlerini listeler |
 | `POST /api/push-monitors` | Yeni push monitörü oluşturur |
 | `POST /api/push/{token}` | Cron ve yedekleme ping sinyali |
+| `GET /api/backup/download` | Kilitlenmesiz SQLite dahili anlık yedek indirme (`.db`) |
+| `GET /api/settings/db-stats` | Gerçek zamanlı SQLite ve WAL dosya boyutu telemetrisi |
+| `GET /api/settings` | Tüm sistem ayarlarını getirir |
+| `PUT /api/settings` | Sistem ayarlarını günceller |
 | `POST /api/notifications/test` | Test bildirimi gönderir (Discord, Telegram, Ntfy, Webhook) |
 | `GET /api/stream/events` | Server-Sent Events canlı durum akışı |
 | `GET /api/auth/status` | Mevcut oturum ve Zero-Trust SSO tespiti |

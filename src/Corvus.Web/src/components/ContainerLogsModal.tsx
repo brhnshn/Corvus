@@ -9,6 +9,7 @@ import {
   Radio
 } from 'lucide-react';
 import { api } from '../api/client';
+import { useI18n } from '../i18n';
 
 interface ContainerLogsModalProps {
   containerId: string;
@@ -21,6 +22,7 @@ export const ContainerLogsModal: React.FC<ContainerLogsModalProps> = ({
   containerName,
   onClose
 }) => {
+  const { t } = useI18n();
   const [logs, setLogs] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -132,10 +134,10 @@ export const ContainerLogsModal: React.FC<ContainerLogsModalProps> = ({
                       ? 'bg-[#22c55e]/15 text-[#22c55e] border-[#22c55e]/30 animate-pulse' 
                       : 'bg-[#6b7280]/15 text-[#9ca3af] border-[#2a2e3f]'
                   }`}
-                  title={isLive ? 'Canlı akışı duraklat' : 'Canlı akışı başlat'}
+                  title={isLive ? t('logsModal.pausedBadge') : t('logsModal.liveBadge')}
                 >
                   <Radio className="w-2.5 h-2.5" />
-                  {isLive ? 'Canlı' : 'Duraklatıldı'}
+                  {isLive ? t('logsModal.liveBadge') : t('logsModal.pausedBadge')}
                 </button>
               </div>
             </div>
@@ -144,7 +146,7 @@ export const ContainerLogsModal: React.FC<ContainerLogsModalProps> = ({
           <button
             onClick={onClose}
             className="text-[#9ca3af] hover:text-[#e5e7eb] p-1.5 rounded-lg hover:bg-[#2a2e3f]/60 transition-colors cursor-pointer"
-            title="Kapat"
+            title={t('common.close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -157,7 +159,7 @@ export const ContainerLogsModal: React.FC<ContainerLogsModalProps> = ({
             <Search className="w-3.5 h-3.5 text-[#9ca3af] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
-              placeholder="Loglarda ara (örn. error, request)..."
+              placeholder={t('logsModal.searchPlaceholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full bg-[#0a0c10] border border-[#2a2e3f] rounded-lg pl-8 pr-3 py-1.5 text-xs text-[#e5e7eb] placeholder-[#9ca3af] focus:outline-none focus:border-[#d4d4d8]"
@@ -172,10 +174,10 @@ export const ContainerLogsModal: React.FC<ContainerLogsModalProps> = ({
               onChange={(e) => setTailCount(Number(e.target.value))}
               className="bg-[#0a0c10] border border-[#2a2e3f] rounded-lg px-2.5 py-1.5 text-xs text-[#9ca3af] focus:outline-none focus:border-[#d4d4d8] cursor-pointer"
             >
-              <option value={50}>Son 50 satır</option>
-              <option value={100}>Son 100 satır</option>
-              <option value={250}>Son 250 satır</option>
-              <option value={500}>Son 500 satır</option>
+              <option value={50}>{t('logsModal.lines50')}</option>
+              <option value={100}>{t('logsModal.lines100')}</option>
+              <option value={250}>{t('logsModal.lines250')}</option>
+              <option value={500}>{t('logsModal.lines500')}</option>
             </select>
 
             {/* Otomatik Kaydırma */}
@@ -186,17 +188,16 @@ export const ContainerLogsModal: React.FC<ContainerLogsModalProps> = ({
                   ? 'bg-[#d4d4d8] text-[#0f1117] font-semibold border-transparent'
                   : 'bg-[#0a0c10] border-[#2a2e3f] text-[#9ca3af] hover:text-[#e5e7eb]'
               }`}
-              title="Yeni log geldiğinde en alta kaydır"
             >
               <ArrowDown className="w-3 h-3" />
-              <span>Oto-Kaydır</span>
+              <span>{t('logsModal.autoScroll')}</span>
             </button>
 
             {/* Temizle */}
             <button
               onClick={() => setLogs([])}
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#2a2e3f] bg-[#0a0c10] text-[#9ca3af] hover:text-[#ef4444] transition-colors cursor-pointer"
-              title="Terminali temizle"
+              title={t('logsModal.clearTooltip')}
             >
               <Trash2 className="w-3 h-3" />
             </button>
@@ -205,7 +206,7 @@ export const ContainerLogsModal: React.FC<ContainerLogsModalProps> = ({
             <button
               onClick={fetchInitialLogs}
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#2a2e3f] bg-[#0a0c10] text-[#9ca3af] hover:text-[#e5e7eb] transition-colors cursor-pointer"
-              title="Yeniden yükle"
+              title={t('logsModal.refreshTooltip')}
             >
               <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -220,14 +221,14 @@ export const ContainerLogsModal: React.FC<ContainerLogsModalProps> = ({
           {loading && logs.length === 0 && (
             <div className="flex items-center justify-center h-48 text-[#9ca3af]">
               <RefreshCw className="w-5 h-5 animate-spin mr-2" />
-              Loglar çekiliyor...
+              {t('logsModal.loading')}
             </div>
           )}
 
           {!loading && filteredLogs.length === 0 && (
             <div className="flex flex-col items-center justify-center h-48 text-[#9ca3af]/60">
               <Terminal className="w-8 h-8 mb-2 opacity-40" />
-              <span>{search ? 'Aramaya uygun log satırı bulunamadı.' : 'Henüz bir log kaydı yok.'}</span>
+              <span>{t('logsModal.noLogs')}</span>
             </div>
           )}
 
@@ -242,8 +243,8 @@ export const ContainerLogsModal: React.FC<ContainerLogsModalProps> = ({
 
         {/* Footer */}
         <div className="h-8 px-4 bg-[#13151f] border-t border-[#2a2e3f] flex items-center justify-between text-[11px] text-[#9ca3af] font-mono">
-          <span>{filteredLogs.length} satır gösteriliyor</span>
-          <span>Buffer: {logs.length} / 1000</span>
+          <span>{t('logsModal.showingLines', { count: filteredLogs.length })}</span>
+          <span>{t('logsModal.bufferStatus', { current: logs.length, max: 1000 })}</span>
         </div>
       </div>
     </div>

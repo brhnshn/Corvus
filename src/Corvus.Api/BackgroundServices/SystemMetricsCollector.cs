@@ -115,7 +115,8 @@ public class SystemMetricsCollector : BackgroundService
                 ramUsedMb = (gcMemory.TotalAvailableMemoryBytes - gcMemory.MemoryLoadBytes) / (1024 * 1024);
                 if (ramUsedMb <= 0)
                 {
-                    ramUsedMb = Process.GetCurrentProcess().WorkingSet64 / (1024 * 1024);
+                    using var curProc = Process.GetCurrentProcess();
+                    ramUsedMb = curProc.WorkingSet64 / (1024 * 1024);
                 }
             }
         }

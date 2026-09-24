@@ -40,12 +40,15 @@ Corvus, self-hosted sunucular için açık kaynak, düşük kaynak tüketimli, t
 - **TypeScript + React 19 + Vite**
 - Stil: **Tailwind CSS v4**
 - Grafikler: **Recharts**
+- Çoklu Dil (i18n): **Derleme anında tip güvenli yerli React 19 Context** (`DeepStringify`), sıfır dış kütüphane ek yükü (~1.2 KB), varsayılan İngilizce (`en`) ve tam kapsamlı Türkçe (`tr`) desteği, dinamik dil seçici
 - Kod Ayrıştırma (Code-Splitting): **React.lazy + Suspense** ve Vite `manualChunks` ile <200 KB ilk yükleme
 - İletişim: REST + **Server-Sent Events (SSE)** üzerinden anlık durum yayını
 
 ### Veri katmanı
-- **SQLite (Microsoft.Data.Sqlite) + Dapper (Dapper.AOT)**: WAL modu, `PRAGMA busy_timeout = 5000;`, `PRAGMA temp_store = MEMORY;`
-- **DbUp**: SQL-first sıralı migration yönetimi (`001_init.sql`, `002_add_users.sql`, `003_roadmap_features.sql`)
+- **SQLite (Microsoft.Data.Sqlite) + Dapper (Dapper.AOT)**: WAL modu, `PRAGMA busy_timeout = 5000;`, `PRAGMA synchronous = NORMAL;`, `PRAGMA temp_store = MEMORY;`, `PRAGMA cache_size = -64000;` ve periyodik `PRAGMA optimize;`
+- **DbUp**: SQL-first sıralı migration yönetimi (`001_init.sql`, `002_add_users.sql`, `003_roadmap_features.sql`, `004_performance_indexes.sql`)
+- Zaman serisi tablolarında kompozit performans indeksleri (`system_metrics(recorded_at)`, `uptime_checks(service_id, checked_at)`)
+- **Yedekleme ve Saklama Motoru**: Kilitlenmesiz SQLite anlık görüntü indirme (`VACUUM INTO`), gerçek zamanlı veritabanı disk boyutu telemetrisi (`GET /api/settings/db-stats`), Sınırsız mod destekli dinamik retention temizleyicisi
 
 ---
 
@@ -180,7 +183,7 @@ Push monitor üzerinden gelen son yedekleme sinyalleri.
 | `ContainerDiscoveryService` | 10 sn | Docker socket'ten container listesini senkronize eder |
 | `SystemMetricsCollector` | 15 sn | Host CPU/RAM/disk/network ölçer, `system_metrics` tablosuna yazar |
 | `UptimeCheckerService` | 60 sn | HTTP yanıtlarını, TCP soket bağlantılarını ve SSL sertifika geçerlilik günlerini denetler; Dead Man's Snitch periyot aşımında DOWN uyarısı üretir; durum değişiminde Discord/Telegram/Ntfy alarmlarını tetikler ve SSE ile yayınlar |
-| `RetentionCleanupService` | Günde 1 kez | `system_metrics` ve `uptime_checks` tablolarındaki eski kayıtları temizler (varsayılan 30 gün) |
+| `RetentionCleanupService` | Günde 1 kez | `retention_days` ayarını dinamik okur; > 0 ise `system_metrics` ve `uptime_checks` eski kayıtlarını temizler, 0 (Sınırsız) ise silmeyi atlar ve `PRAGMA optimize;` çalıştırır |
 
 ---
 
@@ -200,12 +203,12 @@ Push monitor üzerinden gelen son yedekleme sinyalleri.
 
 | Sayfa | URL | Özellikler |
 |---|---|---|
-| **Dashboard** | `/` | Sağlıklı/arızalı servis sayıları, container durumu, canlı metrik grafikleri ve son yedekleme |
+| **Dashboard** | `/` | Sağlıklı/arızalı servis sayıları, container durumu, canlı metrik grafikleri ve anlık güncellenen son yedekleme |
 | **Servisler** | `/` | Servis kartları, durum rozetleri, TCP port göstergeleri, SSL kalan gün rozeti, yukarı/aşağı sıralama butonları |
 | **Container'lar** | `/` | Canlı CPU%, RAM ve Net I/O rozetleri, Start/Stop/Pause/Restart aksiyonları, Compose Stack akordeon gruplaması, canlı log terminali |
 | **Sistem Metrikleri**| `/` | 1h, 6h, 12h, 24h, 7d aralıklarında CPU, RAM, Disk ve Ağ I/O grafikleri |
 | **Uptime & Snitch** | `/` | HTTP/TCP yanıt süreleri geçmişi ve Dead Man's Snitch periyodik cron/yedekleme izleme sekmesi |
-| **Ayarlar** | `/` | Discord, Telegram, Ntfy ve Generic Webhook alarm kanalları ve tek tıkla test bildirimleri |
+| **Ayarlar** | `/` | Sekmeli alarm yapılandırması (Discord, Telegram, Ntfy, Webhook), test bildirimleri, çift yönlü yedekleme (dahili `VACUUM INTO` indirme + harici curl entegrasyonu), esnek veri saklama (7-365 gün, Sınırsız mod, risk uyarısı) ve anlık veritabanı boyutu |
 | **Canlı Durum** | `/status` | **Şifresiz:** Tüm sistemler operasyonel banner'ı, servis uptime oranları, SSL günleri |
 
 ---
@@ -213,9 +216,9 @@ Push monitor üzerinden gelen son yedekleme sinyalleri.
 ## 8. Tamamlanan Yol Haritası Adımları
 
 - [x] Native AOT + Docker.DotNet doğrulama ve custom SocketsHttpHandler istemcisi
-- [x] Dapper + Dapper.AOT + Microsoft.Data.Sqlite + DbUp veri katmanı
+- [x] Dapper + Dapper.AOT + Microsoft.Data.Sqlite + DbUp veri katmanı (001-004)
 - [x] Docker socket multiplexed log demuxer ve canlı log akışı
-- [x] Çok kanallı alarm motoru (Discord, Telegram, Ntfy, Webhook)
+- [x] Çok kanallı alarm motoru (Discord, Telegram, Ntfy, Webhook) ve dil senkronizasyonu
 - [x] Konteyner başına canlı kaynak kullanımı (Docker Stats: CPU, RAM, Net I/O)
 - [x] Genişletilmiş Uptime: TCP Port Ping & SSL Sertifika bitiş günü takibi
 - [x] Dead Man's Snitch: Beklenen periyotlu push monitörü ve otomatik gecikme alarmları
@@ -225,6 +228,9 @@ Push monitor üzerinden gelen son yedekleme sinyalleri.
 - [x] Zero-Trust SSO / Reverse Proxy Auth başlıkları desteği
 - [x] Servis görsel sıralama düzeni (`display_order` ve `/api/services/reorder`)
 - [x] Frontend Code-Splitting ve Recharts paket optimizasyonu (<200 KB chunking)
-- [x] SQLite WAL ve yüksek performans PRAGMA optimizasyonları
+- [x] SQLite WAL, kompozit indeksler ve yüksek performans PRAGMA optimizasyonları
 - [x] Mobil ve tablet uyumlu slide-over drawer ve responsive çift modlu tablolar
-- [x] 34/34 xUnit birim ve entegrasyon testi doğrulaması
+- [x] Derleme anında tip korumalı çift dilli i18n sistemi (İngilizce varsayılan, Türkçe tam destek)
+- [x] Çift yönlü yedekleme yönetimi: Tek tıkla kilitlenmesiz SQLite anlık yedek indirme (`GET /api/backup/download`), SSE canlı Dashboard güncellemesi ve harici push entegrasyonu
+- [x] Esnek veri saklama süresi ve disk telemetrisi: Hazır periyotlar, Sınırsız mod, risk uyarısı, canlı DB boyutu ve dinamik `RetentionCleanupService`
+- [x] 60/60 xUnit birim ve entegrasyon testi doğrulaması

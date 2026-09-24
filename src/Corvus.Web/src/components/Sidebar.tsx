@@ -12,6 +12,8 @@ import {
   Globe 
 } from 'lucide-react';
 import { api, type VersionInfo } from '../api/client';
+import { useI18n } from '../i18n';
+import { LanguageSwitch } from './LanguageSwitch';
 
 export type PageId = 'dashboard' | 'services' | 'containers' | 'metrics' | 'uptime' | 'settings';
 
@@ -33,17 +35,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onClose
 }) => {
   const [versionInfo, setVersionInfo] = React.useState<VersionInfo | null>(null);
+  const { t } = useI18n();
 
   useEffect(() => {
     api.getVersion().then(setVersionInfo).catch(() => {});
   }, []);
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'services', label: 'Servisler', icon: Grid },
-    { id: 'containers', label: 'Container\'lar', icon: Boxes },
-    { id: 'metrics', label: 'Sistem Metrikleri', icon: Activity },
-    { id: 'uptime', label: 'Uptime', icon: Clock },
-    { id: 'settings', label: 'Ayarlar', icon: Settings },
+    { id: 'dashboard', label: t('nav.dashboard'), icon: LayoutDashboard },
+    { id: 'services', label: t('nav.services'), icon: Grid },
+    { id: 'containers', label: t('nav.containers'), icon: Boxes },
+    { id: 'metrics', label: t('nav.metrics'), icon: Activity },
+    { id: 'uptime', label: t('nav.uptime'), icon: Clock },
+    { id: 'settings', label: t('nav.settings'), icon: Settings },
   ] as const;
 
   // ESC tuşuna basıldığında drawer'ı kapat
@@ -102,7 +105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               type="button"
               onClick={onClose}
               className="lg:hidden text-[#9ca3af] hover:text-[#e5e7eb] p-1.5 rounded-lg hover:bg-[#1e2130] transition-colors cursor-pointer"
-              title="Menüyü Kapat"
+              title={t('common.close')}
             >
               <X className="w-5 h-5" />
             </button>
@@ -139,7 +142,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <div className="flex items-center gap-3">
                 <Globe className="w-4 h-4 shrink-0 text-cyan-400" />
-                <span>Canlı Durum</span>
+                <span>{t('nav.liveStatus')}</span>
               </div>
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#0f1117] border border-[#2a2e3f] text-slate-400 font-mono">/status</span>
             </a>
@@ -160,7 +163,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <button
                   type="button"
                   onClick={onLogout}
-                  title="Çıkış Yap"
+                  title={t('nav.logout')}
                   className="text-[#9ca3af] hover:text-[#ef4444] p-1 rounded transition-colors cursor-pointer"
                 >
                   <LogOut className="w-4 h-4" />
@@ -170,37 +173,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         )}
 
-        {/* Dynamic Version & Update Footer */}
+        {/* Dynamic Version & Language Switch Footer */}
         <div className="px-3.5 py-2.5 border-t border-[#2a2e3f] bg-[#0f1117]/30 flex items-center justify-between text-[11px] text-[#9ca3af]">
-          <a
-            href="https://github.com/brhnshn/corvus/releases"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 font-mono hover:text-[#e5e7eb] transition-colors"
-          >
-            <span>Corvus</span>
-            <span className="text-[#e5e7eb] font-semibold">
-              {versionInfo ? `v${versionInfo.currentVersion}` : '...'}
-            </span>
-          </a>
-
-          {versionInfo?.isUpdateAvailable ? (
+          <div className="flex items-center gap-2">
             <a
-              href={versionInfo.releaseUrl}
+              href="https://github.com/brhnshn/corvus/releases"
               target="_blank"
               rel="noopener noreferrer"
-              title={`Yeni sürüm v${versionInfo.latestVersion} yayınlandı!`}
-              className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/60 text-emerald-400 hover:bg-emerald-900 transition-colors text-[10px] font-medium"
+              className="flex items-center gap-1.5 font-mono hover:text-[#e5e7eb] transition-colors"
             >
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+              <span>Corvus</span>
+              <span className="text-[#e5e7eb] font-semibold">
+                {versionInfo ? `v${versionInfo.currentVersion}` : '...'}
               </span>
-              <span>v{versionInfo.latestVersion}</span>
             </a>
-          ) : (
-            <span className="text-[10px] text-slate-500 font-mono">güncel</span>
-          )}
+
+            {versionInfo?.isUpdateAvailable && (
+              <a
+                href={versionInfo.releaseUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={t('nav.updateAvailable')}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/60 text-emerald-400 hover:bg-emerald-900 transition-colors text-[9px] font-medium"
+              >
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                </span>
+                <span>v{versionInfo.latestVersion}</span>
+              </a>
+            )}
+          </div>
+
+          <LanguageSwitch variant="compact" />
         </div>
       </aside>
     </>

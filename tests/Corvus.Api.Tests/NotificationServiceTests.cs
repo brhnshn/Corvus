@@ -58,6 +58,19 @@ public class NotificationServiceTests
         var result = await service.TestChannelAsync("unknown_channel", webhookUrl: null, botToken: null, chatId: null);
 
         Assert.False(result.Success);
+        Assert.Contains("Unsupported notification channel", result.Message);
+    }
+
+    [Fact]
+    public async Task TestChannelAsync_WithTurkishLanguage_ReturnsTurkishFailure()
+    {
+        var repo = new FakeSettingsRepository();
+        await repo.SetAsync("system_language", "tr");
+        var service = new NotificationService(repo, new FakeHttpClientFactory(), NullLogger<NotificationService>.Instance);
+
+        var result = await service.TestChannelAsync("unknown_channel", webhookUrl: null, botToken: null, chatId: null);
+
+        Assert.False(result.Success);
         Assert.Contains("Desteklenmeyen bildirim kanalı", result.Message);
     }
 }

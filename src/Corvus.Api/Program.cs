@@ -73,9 +73,24 @@ using (var scope = app.Services.CreateScope())
 
 app.UseCors();
 
-// Statik Dosyalar (Frontend SPA çıktısı için)
+// Statik Dosyalar (Frontend SPA çıktısı için optimize önbellekleme)
 app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        // Vite tarafından hash'lenmiş JS/CSS varlıkları için 1 yıllık immutable önbellek
+        if (ctx.File.Name.EndsWith(".js", StringComparison.OrdinalIgnoreCase) || 
+            ctx.File.Name.EndsWith(".css", StringComparison.OrdinalIgnoreCase))
+        {
+            ctx.Context.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+        }
+        else if (ctx.File.Name.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+        {
+            ctx.Context.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+        }
+    }
+});
 
 // Minimal API Endpoint Grupları
 app.MapServicesEndpoints();

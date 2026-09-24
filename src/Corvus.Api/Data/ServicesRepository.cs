@@ -12,6 +12,7 @@ public interface IServicesRepository
     Task<bool> DeleteAsync(string id);
     Task UpsertDockerServiceAsync(Service service);
     Task SyncDockerServicesAsync(List<string> activeContainerIds);
+    Task SyncDockerBatchAsync(List<Service> services, List<string> activeContainerIds);
     Task ReorderAsync(List<string> orderedServiceIds);
     Task<List<Service>> GetPublicServicesAsync();
     Task UpdateSslInfoAsync(string serviceId, int sslExpiryDays, string? sslIssuer);
@@ -304,5 +305,38 @@ public class ServicesRepository : IServicesRepository
 
             await conn.ExecuteAsync(sql, new { activeContainerIds });
         }
+    }
+
+    public async Task SyncDockerBatchAsync(List<Service> services, List<string> activeContainerIds)
+    {
+        using var conn = (Microsoft.Data.Sqlite.SqliteConnection)_db.CreateConnection();
+        using var tx = conn.BeginTransaction();
+
+        var upsertSql = @"
+            INSERT INTO services (id, source, container_id, name, description, url, icon, category, health_check_url, status, created_at, updated_at)
+            VALUES (@Id, 'docker', @ContainerId, @Name, @Description, @Url, @Icon, @Category, @HealthCheckUrl, @Status, @CreatedAt, @UpdatedAt)
+            ON CONFLICT(id) DO UPDATE SET
+                status = excluded.status,
+                url = COALESCE(services.url, excluded.url),
+                updated_at = excluded.updated_at";
+
+        foreach (var s in services)
+        {
+            await conn.ExecuteAsync(upsertSql, s, tx);
+        }
+
+        if (activeContainerIds.Count == 0)
+        {
+            await conn.ExecuteAsync("DELETE FROM services WHERE source = 'docker'", transaction: tx);
+        }
+        else
+        {
+            await conn.ExecuteAsync(
+                "DELETE FROM services WHERE source = 'docker' AND container_id NOT IN @activeContainerIds",
+                new { activeContainerIds },
+                tx);
+        }
+
+        tx.Commit();
     }
 }
