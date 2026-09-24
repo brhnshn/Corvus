@@ -17,6 +17,11 @@
   <img src="https://img.shields.io/badge/License-MIT-blue" alt="License" />
 </p>
 
+<p align="center">
+  <a href="README.md"><img src="https://img.shields.io/badge/Language-English-blue?style=for-the-badge" alt="English" /></a>
+  <a href="README.tr.md"><img src="https://img.shields.io/badge/Dil-Türkçe-red?style=for-the-badge" alt="Türkçe" /></a>
+</p>
+
 ---
 
 ## 🌟 Overview

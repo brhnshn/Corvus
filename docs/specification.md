@@ -1,223 +1,230 @@
-# Corvus — Proje ve Mimari Dokümanı
+<div align="center">
 
-## 1. Proje Tanımı
+[![English](https://img.shields.io/badge/Language-English-blue?style=for-the-badge)](specification.md)
+[![Türkçe](https://img.shields.io/badge/Dil-T%C3%BCrk%C3%A7e-red?style=for-the-badge)](specification.tr.md)
 
-Corvus, self-hosted sunucular için açık kaynak, düşük kaynak tüketimli, tek panelden erişim + izleme aracıdır.
+</div>
 
-**Ne yapıyor:**
-- **Launcher:** Sunucudaki servisleri (uygulamalar, veritabanları, yönetim araçları) tek panelden listeler, sürükle-bırak/ok tuşlarıyla sıralar ve erişim sağlar — canlı durum bilgisiyle birlikte
-- **Monitoring:** Sistem kaynakları (CPU/RAM/disk), konteyner canlı CPU/RAM/Net istatistikleri, container logları, uptime/endpoint sağlığı (HTTP/TCP/SSL), backup ve cron durumu tek yerde toplanır
-- **Boşluk doldurma:** Coolify gibi araçlar deploy/container yönetimini yapıyor ama dış gözlemlenebilirlik (uptime, eşik tabanlı uyarı, launcher) sağlamıyor — Corvus bu boşluğu kapatıyor
+# Corvus — Project & Technical Specification
 
-**Servis keşfi — iki modlu:**
-- **Otomatik:** Docker socket'ten çalışan container'ları algılar, Compose projelerine göre gruplar
-- **Manuel:** Docker dışı/uzak servisler veya TCP portları için kullanıcı elle ekleyebilir
+## 1. Project Overview
 
-**Genel kullanım prensibi:** Açık kaynak bir araç olarak belirli bir reverse proxy, orkestrasyon aracı veya VPN'e bağımlı olmamalı — kullanıcı bunları tercihine göre kullanır ya da kullanmaz, Corvus hiçbirini şart koşmaz. Ters vekil arkasında Zero-Trust SSO başlıklarını (`Tailscale`, `Cloudflare Access`, `Remote-User`) otomatik tanır.
+Corvus is an open-source, ultra-low resource consumption service launcher and unified monitoring dashboard tailored for self-hosted servers, homelabs, and VPS nodes.
 
-**Marka:** Corvus (Latince kuzgun) — "gözcü, yukarıdan izleyen" teması. Koyu tema, gümüş/platin accent, monochrome icon-only logo.
+**Core Capabilities:**
+- **Launcher:** Presents server services (web apps, databases, administrative tools) in a single dashboard with drag-and-drop or keyboard-accessible ordering, direct URL launching, and live operational status badges.
+- **Monitoring:** Consolidates host system metrics (CPU, RAM, disk, network), per-container stats (live CPU%, memory limit/usage, net I/O), live container logs, uptime & endpoint health (HTTP, TCP, SSL expiration), and cron/backup status in one view.
+- **Bridging the Gap:** Deployment orchestrators handle container provisioning but lack external uptime checks and status launching. Corvus fills this void with a minimal, unified footprint.
+
+**Dual-Mode Service Discovery:**
+- **Automatic:** Discovers running containers via the Docker socket and groups them by Compose projects.
+- **Manual:** Supports registering non-Docker services, bare-metal endpoints, remote APIs, or TCP ports.
+
+**Interoperability Principle:** As an open-source tool, Corvus does not enforce specific reverse proxies, orchestrators, or VPNs. When deployed behind reverse proxies, it seamlessly detects Zero-Trust SSO authentication headers (`Tailscale`, `Cloudflare Access`, `Remote-User`, `X-Forwarded-User`).
+
+**Brand Identity:** Corvus (Latin for raven) — represents a watchful guardian observing from above. Dark theme, silver/platinum accents, monochrome icon-only aesthetic.
 
 ---
 
-## 2. Teknoloji Seçimi
+## 2. Technology Stack
 
 ### Backend
-- Dil: **C#**
-- .NET sürümü: **.NET 9**
-- Web framework: **ASP.NET Core Minimal API**
-- Derleme modu: **Native AOT** (Zero Reflection)
-- Docker erişimi: **Custom SocketsHttpHandler + System.Text.Json Source Generator** (Docker daemon REST API'sine Unix Socket ve Windows Named Pipe üzerinden doğrudan erişim)
-- Hedef RAM: <30 MB (Canlı ölçümlerde ~14-18 MB)
+- Language: **C#**
+- .NET Version: **.NET 9**
+- Web Framework: **ASP.NET Core Minimal API**
+- Compilation Mode: **Native AOT** (Zero Reflection)
+- Docker Communication: **Custom SocketsHttpHandler + System.Text.Json Source Generation** (direct communication with the Docker daemon over Unix domain sockets or Windows named pipes)
+- Memory Footprint Target: <30 MB RAM (runtime measurements: ~14–18 MB)
 
 ### Frontend
 - **TypeScript + React 19 + Vite**
-- Stil: **Tailwind CSS v4**
-- Grafikler: **Recharts**
-- Kod Ayrıştırma (Code-Splitting): **React.lazy + Suspense** ve Vite `manualChunks` ile <200 KB ilk yükleme
-- İletişim: REST + **Server-Sent Events (SSE)** üzerinden anlık durum yayını
+- Styling: **Tailwind CSS v4**
+- Charting: **Recharts**
+- Code-Splitting: **React.lazy + Suspense** and Vite `manualChunks` with an initial bundle payload under 200 KB
+- Real-Time Communication: REST + **Server-Sent Events (SSE)** for live status broadcasts
 
-### Veri katmanı
-- **SQLite (Microsoft.Data.Sqlite) + Dapper (Dapper.AOT)**: WAL modu, `PRAGMA busy_timeout = 5000;`, `PRAGMA temp_store = MEMORY;`
-- **DbUp**: SQL-first sıralı migration yönetimi (`001_init.sql`, `002_add_users.sql`, `003_roadmap_features.sql`)
+### Persistence Layer
+- **SQLite (Microsoft.Data.Sqlite) + Dapper (Dapper.AOT)**: WAL mode with `PRAGMA busy_timeout = 5000;` and `PRAGMA temp_store = MEMORY;`
+- **DbUp**: Sequential SQL-first schema migrations (`001_init.sql`, `002_add_users.sql`, `003_roadmap_features.sql`)
 
 ---
 
-## 3. Veri Modeli (SQLite Şeması)
+## 3. Data Model (SQLite Schema)
 
 ### `services`
-Otomatik algılanan veya manuel eklenen tüm servisler (launcher + durum takibi için tek kaynak).
+Unified table for auto-discovered and manually registered services.
 
-| Alan | Tip | Açıklama |
+| Field | Type | Description |
 |---|---|---|
-| id | TEXT (UUID) | Birincil anahtar |
-| source | TEXT | `docker` veya `manual` |
-| container_id | TEXT (nullable) | `source=docker` ise Docker container ID'si |
-| name | TEXT | Görünen isim (label'dan, manuel girişten veya container adından) |
-| description | TEXT (nullable) | Kısa açıklama |
-| url | TEXT (nullable) | Launcher'da "Aç" butonunun gideceği adres |
-| icon | TEXT (nullable) | İkon adı/URL |
-| category | TEXT (nullable) | Gruplama için (Uygulamalar, Veritabanları, vb.) |
-| health_check_url | TEXT (nullable) | Uptime kontrolü için ayrı endpoint (boşsa `url` kullanılır) |
+| id | TEXT (UUID) | Primary key |
+| source | TEXT | `docker` or `manual` |
+| container_id | TEXT (nullable) | Docker container ID if `source=docker` |
+| name | TEXT | Display name (extracted from label, manual input, or container name) |
+| description | TEXT (nullable) | Short description |
+| url | TEXT (nullable) | Target URL for the "Open" launcher button |
+| icon | TEXT (nullable) | Icon name or URL |
+| category | TEXT (nullable) | Category grouping (Apps, Databases, etc.) |
+| health_check_url | TEXT (nullable) | Distinct endpoint for health checking (defaults to `url` if empty) |
 | status | TEXT | `healthy` / `degraded` / `down` / `unknown` |
-| check_type | TEXT | `http` veya `tcp` |
-| port | INTEGER (nullable) | TCP port numarası |
-| ssl_expiry_days | INTEGER (nullable) | Kalan SSL sertifika günü |
-| ssl_issuer | TEXT (nullable) | Sertifikayı veren kurum |
-| is_public | INTEGER | `1`: Halka açık durum sayfasında görünür, `0`: gizli |
-| display_order | INTEGER | Özel sıralama sırası |
-| created_at, updated_at | DATETIME | |
+| check_type | TEXT | `http` or `tcp` |
+| port | INTEGER (nullable) | TCP port number |
+| ssl_expiry_days | INTEGER (nullable) | Remaining SSL certificate validity days |
+| ssl_issuer | TEXT (nullable) | SSL issuing authority |
+| is_public | INTEGER | `1`: Visible on public status page, `0`: private |
+| display_order | INTEGER | Custom visual order index |
+| created_at, updated_at | DATETIME | Timestamp tracking |
 
 ### `service_overrides`
-Docker'dan otomatik algılanan bir container için kullanıcının panel üzerinden yaptığı düzenlemeler.
+User customization overrides for auto-discovered Docker containers.
 
-| Alan | Tip | Açıklama |
+| Field | Type | Description |
 |---|---|---|
-| container_id | TEXT | Birincil anahtar, `services.container_id` ile eşleşir |
-| name, description, url, icon, category | TEXT (nullable) | Override edilen alanlar |
+| container_id | TEXT | Primary key matching `services.container_id` |
+| name, description, url, icon, category | TEXT (nullable) | User-overridden fields |
 
 ### `push_monitors` (Dead Man's Snitch)
-Periyodik cron veya yedekleme scriptlerinin zamanında çalışıp çalışmadığını izleyen monitörler.
+Monitors periodic cron jobs and backup scripts to ensure timely execution.
 
-| Alan | Tip | Açıklama |
+| Field | Type | Description |
 |---|---|---|
-| id | TEXT (UUID) | Birincil anahtar |
-| token | TEXT (UNIQUE) | Push URL'sinde kullanılan rastgele anahtar |
-| name | TEXT | Monitör adı |
-| expected_interval_minutes | INTEGER | Beklenen çalışma periyodu (varsayılan: 1440 dk = 24 saat) |
-| grace_period_minutes | INTEGER | Tolerans süresi (varsayılan: 60 dk) |
-| last_seen_at | TEXT (nullable) | Son başarılı sinyal zamanı |
+| id | TEXT (UUID) | Primary key |
+| token | TEXT (UNIQUE) | Unique ping token used in push URL |
+| name | TEXT | Monitor display name |
+| expected_interval_minutes | INTEGER | Expected frequency in minutes (default: 1440 min = 24 hours) |
+| grace_period_minutes | INTEGER | Allowed grace window before alert (default: 60 min) |
+| last_seen_at | TEXT (nullable) | Timestamp of the last received heartbeat |
 | status | TEXT | `healthy` / `down` / `unknown` |
-| created_at | DATETIME | |
+| created_at | DATETIME | Creation timestamp |
 
 ### `system_metrics`
-Host düzeyinde periyodik ölçümler (zaman serisi).
+Host telemetry time-series samples.
 
-| Alan | Tip | Açıklama |
+| Field | Type | Description |
 |---|---|---|
-| id | INTEGER (autoincrement) | |
-| recorded_at | DATETIME | |
-| cpu_percent | REAL | |
-| ram_used_mb, ram_total_mb | INTEGER | |
-| disk_used_gb, disk_total_gb | INTEGER | |
-| network_rx_bytes, network_tx_bytes | INTEGER | |
+| id | INTEGER (autoincrement) | Primary key |
+| recorded_at | DATETIME | Timestamp of sample |
+| cpu_percent | REAL | Overall host CPU usage |
+| ram_used_mb, ram_total_mb | INTEGER | System RAM usage |
+| disk_used_gb, disk_total_gb | INTEGER | Primary disk usage |
+| network_rx_bytes, network_tx_bytes | INTEGER | Network throughput |
 
 ### `uptime_checks`
-Her endpoint kontrolünün sonucu (zaman serisi).
+Individual endpoint audit log entries.
 
-| Alan | Tip | Açıklama |
+| Field | Type | Description |
 |---|---|---|
-| id | INTEGER (autoincrement) | |
-| service_id | TEXT | `services.id` referansı |
-| checked_at | DATETIME | |
-| status | TEXT | `up` / `down` |
-| response_time_ms | INTEGER (nullable) | Yanıt süresi |
-| error_message | TEXT (nullable) | |
+| id | INTEGER (autoincrement) | Primary key |
+| service_id | TEXT | Foreign key referencing `services.id` |
+| checked_at | DATETIME | Check execution timestamp |
+| status | TEXT | `up` or `down` |
+| response_time_ms | INTEGER (nullable) | Latency in milliseconds |
+| error_message | TEXT (nullable) | Error diagnostics if unreachable |
 
 ### `backup_events`
-Push monitor üzerinden gelen son yedekleme sinyalleri.
+Incoming push monitor heartbeat records.
 
-| Alan | Tip | Açıklama |
+| Field | Type | Description |
 |---|---|---|
-| id | INTEGER (autoincrement) | |
-| token | TEXT | Bildiren job anahtarı |
-| received_at | DATETIME | |
-| status | TEXT | `success` / `failure` |
-| size_bytes | INTEGER (nullable) | |
-| message | TEXT (nullable) | |
+| id | INTEGER (autoincrement) | Primary key |
+| token | TEXT | Associated monitor token |
+| received_at | DATETIME | Receive timestamp |
+| status | TEXT | `success` or `failure` |
+| size_bytes | INTEGER (nullable) | Reported backup archive size |
+| message | TEXT (nullable) | Execution log or notes |
 
-### `users` ve `settings`
+### `users` and `settings`
 - `users`: `id`, `username`, `password_hash` (SHA-256), `role`, `created_at`
-- `settings`: `key`, `value`, `updated_at` (bildirim ayarları, kayıt açık/kapalı)
+- `settings`: `key`, `value`, `updated_at` (alert credentials, registration toggle)
 
 ---
 
-## 4. API Endpoint'leri (Minimal API)
+## 4. API Endpoints (Minimal API)
 
-| Method & Path | Açıklama |
+| Method & Path | Description |
 |---|---|
-| `GET /api/dashboard/summary` | Servis sayıları, konteyner durumu, metrik ve backup özetini döner |
-| `GET /api/services` | Servis listesi (sıralı, override ve SSL bilgileriyle) |
-| `POST /api/services` | Yeni manuel servis ekler (HTTP veya TCP kontrolü) |
-| `PUT /api/services/{id}` | Servisi günceller veya Docker servisi için override yazar |
-| `PUT /api/services/reorder` | Servislerin görsel sıralamasını kaydeder |
-| `DELETE /api/services/{id}` | Manuel servisi siler veya Docker override'ını kaldırır |
-| `GET /api/status-page` | **Şifresiz:** Halka açık durum sayfası için servis özetlerini döner |
-| `GET /api/containers` | Docker container listesi (durum, portlar, etiketler) |
-| `GET /api/containers/{id}/stats` | Anlık konteyner CPU%, bellek kullanımı ve ağ I/O istatistikleri |
-| `GET /api/containers/{id}/logs` | Son 100 konteyner log satırını döner |
-| `GET /api/containers/{id}/logs/stream` | **SSE:** Gerçek zamanlı canlı konteyner log akışı |
-| `POST /api/containers/{id}/start` | Konteyneri başlatır |
-| `POST /api/containers/{id}/stop` | Konteyneri durdurur |
-| `POST /api/containers/{id}/pause` | Konteyneri duraklatır |
-| `POST /api/containers/{id}/unpause` | Konteyneri devam ettirir |
-| `POST /api/containers/{id}/restart` | Konteyneri yeniden başlatır |
-| `GET /api/push-monitors` | Dead Man's Snitch monitörlerini listeler |
-| `POST /api/push-monitors` | Yeni beklenen periyotlu push monitörü oluşturur |
-| `PUT /api/push-monitors/{id}` | Push monitörünü günceller |
-| `DELETE /api/push-monitors/{id}` | Push monitörünü siler |
-| `POST /api/push/{token}` | Cron veya yedekleme sinyalini alır, snitch durumunu günceller |
-| `GET /api/metrics/system` | Sistem kaynakları zaman serisi (`?range=1h\|24h\|7d`) |
-| `GET /api/uptime` | Servis uptime geçmişi (`?service_id=...&range=7d`) |
-| `POST /api/notifications/test` | Alarm kanallarını (Discord, Telegram, Ntfy, Webhook) test eder |
-| `GET /api/stream/events` | **SSE:** Servis durumu ve sistem olaylarının anlık yayını |
-| `GET /api/auth/status` | Oturum durumu ve Zero-Trust SSO başlık denetimi |
-| `POST /api/auth/login` | Giriş yapar ve oturum çerezi üretir |
-| `POST /api/auth/logout` | Oturumu sonlandırır |
+| `GET /api/dashboard/summary` | Consolidated KPI overview of services, containers, metrics, and backup status |
+| `GET /api/services` | Ordered service catalog with overrides and SSL metadata |
+| `POST /api/services` | Register a new manual service (HTTP or TCP ping) |
+| `PUT /api/services/{id}` | Update service details or save an override for a Docker container |
+| `PUT /api/services/reorder` | Persist visual reordering of services |
+| `DELETE /api/services/{id}` | Delete a manual service or reset a Docker container override |
+| `GET /api/status-page` | **Unauthenticated:** Public status page summary |
+| `GET /api/containers` | List Docker containers with status, ports, and labels |
+| `GET /api/containers/{id}/stats` | Live per-container CPU%, RAM usage, and Network I/O metrics |
+| `GET /api/containers/{id}/logs` | Snapshot of the last 100 log lines |
+| `GET /api/containers/{id}/logs/stream` | **SSE:** Live real-time container log stream |
+| `POST /api/containers/{id}/start` | Start container |
+| `POST /api/containers/{id}/stop` | Stop container |
+| `POST /api/containers/{id}/pause` | Pause container |
+| `POST /api/containers/{id}/unpause` | Unpause container |
+| `POST /api/containers/{id}/restart` | Restart container |
+| `GET /api/push-monitors` | List Dead Man's Snitch periodic push monitors |
+| `POST /api/push-monitors` | Create a new expected-interval push monitor |
+| `PUT /api/push-monitors/{id}` | Update push monitor interval or settings |
+| `DELETE /api/push-monitors/{id}` | Delete a push monitor |
+| `POST /api/push/{token}` | Push webhook ping for cron and backup jobs |
+| `GET /api/metrics/system` | System resource time-series (`?range=1h\|24h\|7d`) |
+| `GET /api/uptime` | Service uptime history (`?service_id=...&range=7d`) |
+| `POST /api/notifications/test` | Test dispatch alerts (Discord, Telegram, Ntfy, Webhook) |
+| `GET /api/stream/events` | **SSE:** Real-time stream of service state changes and events |
+| `GET /api/auth/status` | Current session state and Zero-Trust SSO header detection |
+| `POST /api/auth/login` | Authenticate user and issue session cookie |
+| `POST /api/auth/logout` | Invalidate current session |
 
 ---
 
-## 5. Arka Plan Servisleri (Background Services)
+## 5. Background Services
 
-| Servis | Periyot | İş |
+| Service | Interval | Function |
 |---|---|---|
-| `ContainerDiscoveryService` | 10 sn | Docker socket'ten container listesini senkronize eder |
-| `SystemMetricsCollector` | 15 sn | Host CPU/RAM/disk/network ölçer, `system_metrics` tablosuna yazar |
-| `UptimeCheckerService` | 60 sn | HTTP yanıtlarını, TCP soket bağlantılarını ve SSL sertifika geçerlilik günlerini denetler; Dead Man's Snitch periyot aşımında DOWN uyarısı üretir; durum değişiminde Discord/Telegram/Ntfy alarmlarını tetikler ve SSE ile yayınlar |
-| `RetentionCleanupService` | Günde 1 kez | `system_metrics` ve `uptime_checks` tablolarındaki eski kayıtları temizler (varsayılan 30 gün) |
+| `ContainerDiscoveryService` | 10 sec | Synchronizes container state from the Docker socket |
+| `SystemMetricsCollector` | 15 sec | Samples host CPU, RAM, disk, and network stats into `system_metrics` |
+| `UptimeCheckerService` | 60 sec | Verifies HTTP status, TCP port reachability, and SSL expiration days; evaluates Dead Man's Snitch timeouts; triggers multi-channel alerts upon status change and publishes SSE events |
+| `RetentionCleanupService` | Once daily | Prunes aged time-series records from `system_metrics` and `uptime_checks` (default: 30 days) |
 
 ---
 
-## 6. Kimlik Doğrulama ve Zero-Trust SSO
+## 6. Authentication and Zero-Trust SSO
 
-1. **Zero-Trust SSO / Reverse Proxy Desteği:**
-   - Ters vekil sunucudan (Tailscale, Cloudflare Access, Authelia, Traefik) gelen `Tailscale-User-Login`, `Cf-Access-Authenticated-User-Email`, `Remote-User` veya `X-Forwarded-User` başlıkları otomatik algılanır; şifresiz oturum açılır.
-2. **Kullanıcı Adı / Şifre Girişi:**
-   - SHA-256 hash'li yerleşik kimlik doğrulama ve oturum çerezi (`corvus_session`).
-   - İlk kullanıcı oluşturulduktan sonra arayüzden yeni kayıtlar kapatılabilir.
-3. **Opsiyonel Kapatma:**
-   - `CORVUS_AUTH_ENABLED=false` ile tamamen kimlik doğrulamasız çalıştırılabilir.
+1. **Zero-Trust SSO / Reverse Proxy Support:**
+   - Automatically detects incoming trusted proxy headers (`Tailscale-User-Login`, `Cf-Access-Authenticated-User-Email`, `Remote-User`, `X-Forwarded-User`) to establish passwordless authenticated sessions.
+2. **Credential Authentication:**
+   - Secure SHA-256 hashed password storage with HTTP-only session cookies (`corvus_session`).
+   - The user registration modal can be toggled off after the initial admin account is created.
+3. **Optional Bypass:**
+   - Set `CORVUS_AUTH_ENABLED=false` to run in completely unauthenticated internal homelab mode.
 
 ---
 
-## 7. Sayfalar ve Kullanıcı Arayüzü
+## 7. Application Pages and Views
 
-| Sayfa | URL | Özellikler |
+| Page | URL | Features |
 |---|---|---|
-| **Dashboard** | `/` | Sağlıklı/arızalı servis sayıları, container durumu, canlı metrik grafikleri ve son yedekleme |
-| **Servisler** | `/` | Servis kartları, durum rozetleri, TCP port göstergeleri, SSL kalan gün rozeti, yukarı/aşağı sıralama butonları |
-| **Container'lar** | `/` | Canlı CPU%, RAM ve Net I/O rozetleri, Start/Stop/Pause/Restart aksiyonları, Compose Stack akordeon gruplaması, canlı log terminali |
-| **Sistem Metrikleri**| `/` | 1h, 6h, 12h, 24h, 7d aralıklarında CPU, RAM, Disk ve Ağ I/O grafikleri |
-| **Uptime & Snitch** | `/` | HTTP/TCP yanıt süreleri geçmişi ve Dead Man's Snitch periyodik cron/yedekleme izleme sekmesi |
-| **Ayarlar** | `/` | Discord, Telegram, Ntfy ve Generic Webhook alarm kanalları ve tek tıkla test bildirimleri |
-| **Canlı Durum** | `/status` | **Şifresiz:** Tüm sistemler operasyonel banner'ı, servis uptime oranları, SSL günleri |
+| **Dashboard** | `/` | Operational service KPIs, container summaries, live resource graphs, and backup status |
+| **Services** | `/` | Service launchpad, status badges, TCP indicators, SSL expiration badge, and reordering controls |
+| **Containers** | `/` | Live CPU%, RAM, and Net I/O badges, Start/Stop/Pause/Restart actions, Compose stack accordion grouping, live log terminal |
+| **System Metrics**| `/` | Telemetry graphs across 1h, 6h, 12h, 24h, 7d periods for CPU, RAM, Disk, and Network |
+| **Uptime & Snitch** | `/` | Response latency charts and Dead Man's Snitch cron/backup monitor tab |
+| **Settings** | `/` | Multi-channel alert configuration (Discord, Telegram, Ntfy, Webhook) and test notifications |
+| **Public Status** | `/status` | **Unauthenticated:** Operational status banner, service uptime metrics, and SSL certificates |
 
 ---
 
-## 8. Tamamlanan Yol Haritası Adımları
+## 8. Completed Roadmap Milestones
 
-- [x] Native AOT + Docker.DotNet doğrulama ve custom SocketsHttpHandler istemcisi
-- [x] Dapper + Dapper.AOT + Microsoft.Data.Sqlite + DbUp veri katmanı
-- [x] Docker socket multiplexed log demuxer ve canlı log akışı
-- [x] Çok kanallı alarm motoru (Discord, Telegram, Ntfy, Webhook)
-- [x] Konteyner başına canlı kaynak kullanımı (Docker Stats: CPU, RAM, Net I/O)
-- [x] Genişletilmiş Uptime: TCP Port Ping & SSL Sertifika bitiş günü takibi
-- [x] Dead Man's Snitch: Beklenen periyotlu push monitörü ve otomatik gecikme alarmları
-- [x] Halka Açık / Şifresiz Durum Sayfası (`/status` ve `/api/status-page`)
-- [x] Server-Sent Events (SSE) Canlı Veri Yayını (`/api/stream/events`)
-- [x] Docker Compose Stack Hiyerarşisi ve Gruplama (`com.docker.compose.project`)
-- [x] Zero-Trust SSO / Reverse Proxy Auth başlıkları desteği
-- [x] Servis görsel sıralama düzeni (`display_order` ve `/api/services/reorder`)
-- [x] Frontend Code-Splitting ve Recharts paket optimizasyonu (<200 KB chunking)
-- [x] SQLite WAL ve yüksek performans PRAGMA optimizasyonları
-- [x] Mobil ve tablet uyumlu slide-over drawer ve responsive çift modlu tablolar
-- [x] 34/34 xUnit birim ve entegrasyon testi doğrulaması
+- [x] Native AOT + custom SocketsHttpHandler direct socket client
+- [x] Dapper.AOT + Microsoft.Data.Sqlite + DbUp schema migrations
+- [x] Docker socket multiplexed log demuxer and live log streaming
+- [x] Multi-channel alert engine (Discord, Telegram, Ntfy, Webhook)
+- [x] Live container resource stats (CPU, RAM, Net I/O)
+- [x] Extended Uptime: TCP Port Ping & SSL certificate expiration tracking
+- [x] Dead Man's Snitch: Periodic push monitoring with auto-overdue alerting
+- [x] Unauthenticated Public Status Page (`/status` and `/api/status-page`)
+- [x] Server-Sent Events (SSE) real-time data stream (`/api/stream/events`)
+- [x] Docker Compose stack hierarchy grouping (`com.docker.compose.project`)
+- [x] Zero-Trust SSO / Reverse proxy authentication header support
+- [x] Visual service drag & drop reordering (`display_order` and `/api/services/reorder`)
+- [x] Frontend code-splitting and vendor chunk optimization (<200 KB initial chunk)
+- [x] SQLite WAL mode and high-concurrency PRAGMA tuning
+- [x] Mobile & tablet responsive drawer navigation and dual-mode responsive layout
+- [x] 34/34 passing xUnit test coverage

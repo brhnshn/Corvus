@@ -1,0 +1,210 @@
+<p align="center">
+  <img src=".github/assets/logo.png" width="120" alt="Corvus Logo" />
+</p>
+
+<h1 align="center">Corvus</h1>
+
+<p align="center">
+  <strong>Kendi Sunucularınız İçin Ultra Hafif, Native AOT Servis Başlatıcı ve İzleme Paneli</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/.NET-9.0_Native_AOT-512BD4?logo=dotnet" alt=".NET 9" />
+  <img src="https://img.shields.io/badge/RAM_T%C3%BCketimi-%3C30_MB-success" alt="RAM <30MB" />
+  <img src="https://img.shields.io/badge/Frontend-React_19_+_Vite_+_Tailwind-61DAFB?logo=react" alt="React" />
+  <img src="https://img.shields.io/badge/Veritaban%C4%B1-SQLite_+_Dapper.AOT-003B57?logo=sqlite" alt="SQLite" />
+  <img src="https://img.shields.io/badge/Testler-34_Ba%C5%9Far%C4%B1l%C4%B1-brightgreen" alt="Tests" />
+  <img src="https://img.shields.io/badge/Lisans-MIT-blue" alt="License" />
+</p>
+
+<p align="center">
+  <a href="README.md"><img src="https://img.shields.io/badge/Language-English-blue?style=for-the-badge" alt="English" /></a>
+  <a href="README.tr.md"><img src="https://img.shields.io/badge/Dil-T%C3%BCrk%C3%A7e-red?style=for-the-badge" alt="Türkçe" /></a>
+</p>
+
+---
+
+## 🌟 Genel Bakış
+
+**Corvus**, homelab ortamları, VPS sunucuları ve self-hosted altyapılar için tasarlanmış ultra hafif, yerel bir servis başlatıcı ve gözlemlenebilirlik (observability) kontrol panelidir. Sıfır çalışma zamanı yansıması (zero-reflection) ile önceden derlenen (**Native AOT**) Corvus, **30 MB'ın altında RAM** tüketerek çalışırken gerçek zamanlı Docker konteyner keşfi, servis sağlık denetimi, zaman serisi kaynak takibi, canlı konteyner logları, çok kanallı alarmlar ve periyodik push izleme sunar.
+
+---
+
+## ✨ Temel Özellikler
+
+- **🚀 Çift Modlu Servis Başlatıcı:**
+  - **Otomatik Keşif:** Docker socket (`/var/run/docker.sock`) üzerinden doğrudan konteynerleri tespit eder ve etiketleri (`corvus.name`, `corvus.category`, `corvus.url` vb.) okur.
+  - **Manuel Servisler:** Harici URL'leri, yerel servisleri veya IoT uç noktalarını el ile tanımlayabilme.
+  - **Görsel Sıralama:** Servisleri yukarı/aşağı butonlarıyla kalıcı olarak sıralayabilme (`display_order`).
+- **🪵 Gerçek Zamanlı Konteyner Log Akışı:**
+  - Docker stdout/stderr akışları için sıfır bellek ayırmalı (zero-alloc) ayrıştırıcı (`DockerLogDemuxer.cs`).
+  - Koyu temalı terminal modalı, anahtar kelime filtreleme ve otomatik kaydırma ile Server-Sent Events (`/api/containers/{id}/logs/stream`) akışı.
+- **⚡ Konteyner İstatistikleri & Yaşam Döngüsü:**
+  - Docker Stats API ile canlı konteyner başına CPU %, Bellek ve Ağ I/O takibi.
+  - Yaşam döngüsü aksiyonları: Onay modalları ile **Start**, **Stop**, **Pause**, **Unpause** ve **Restart**.
+  - **Compose Stack Gruplaması:** Düz liste ile katlanabilir Docker Compose projeleri (`com.docker.compose.project`) arasında tek tıkla geçiş.
+- **🔔 Çok Kanallı Alarm Motoru:**
+  - Servis çöktüğünde (Down 🔴) veya düzeldiğinde (Recovered 🟢) anında **Discord**, **Telegram**, **Ntfy / Gotify** ve **Özel Webhook** bildirimleri.
+  - Ayarlar sayfasından tek tıkla test bildirimleri gönderme.
+- **⏱️ Genişletilmiş Uptime & SSL Takibi:**
+  - **HTTP/HTTPS & TCP Port Ping:** Veritabanları, SSH veya oyun sunucuları gibi HTTP dışı servisler için soket seviyesinde bağlantı testi.
+  - **SSL Sertifika Bitiş Süresi:** SSL kalan gün sayısını ve sertifika sağlayıcısını otomatik takip eder; bitime 14 gün kala uyarı üretir.
+- **💀 Dead Man's Snitch (Periyodik Push Monitörü):**
+  - Cron görevlerini ve yedekleme script'lerini (`borg`, `restic`, bash) izleme.
+  - Beklenen periyot (örn. 24 saatte bir) ve tolerans süresi tanımlayabilme; sinyal gelmediğinde otomatik alarm oluşturma.
+- **🌐 Genel Durum Sayfası (Public Status):**
+  - Şifre gerektirmeyen, bağımsız koyu temalı `/status` sayfası ve `/api/status-page` uç noktası.
+  - Genel sistem durum banner'ı, servis uptime oranları ve SSL günlerini ziyaretçilere açık olarak sunar.
+- **🛡️ Zero-Trust SSO & Ters Vekil (Reverse Proxy) Kimlik Doğrulama:**
+  - Güvenilen proxy başlıkları ile otomatik giriş desteği: `Tailscale-User-Login`, `Cf-Access-Authenticated-User-Email`, `Remote-User`, `X-Forwarded-User`.
+  - Yerleşik kullanıcı adı/şifre doğrulaması ve kapatılabilir kayıt mekanizması.
+- **📱 Mobil ve Tablet Uyumlu Arayüz:**
+  - Slide-over drawer menüsü, sabit mobil üst başlık, duyarlı tablo ve kart görünümleri.
+- **⚡ Yüksek Performans & Optimizasyon:**
+  - SQLite WAL modu, `PRAGMA busy_timeout = 5000;`, `PRAGMA temp_store = MEMORY;`.
+  - `React.lazy` ve Vite `manualChunks` ile kod ayrıştırma (ilk paket boyutu <200 KB).
+
+---
+
+## 🏗️ Mimari Şema
+
+```
+Corvus Mimarisi:
+┌────────────────────────────────────────────────────────┐
+│               Corvus Web Dashboard                    │
+│   (React 19 + TypeScript + Tailwind v4 + Recharts)    │
+│   [Sayfalar: Dashboard, Servisler, Konteynerler,      │
+│     Uptime, Metrikler, Ayarlar, Canlı Durum (/status)] │
+└───────────────────────────┬────────────────────────────┘
+                            │ REST API + SSE Akışı (/api/stream/events)
+┌───────────────────────────▼────────────────────────────┐
+│               Corvus Core Engine                       │
+│       ASP.NET Core Minimal API (.NET 9 Native AOT)     │
+├───────────────────────────┬────────────────────────────┤
+│  Docker REST API Client   │  SQLite + Dapper.AOT       │
+│  (SocketsHttpHandler)     │  (DbUp Migrations 001-003) │
+├───────────────────────────┴────────────────────────────┤
+│  Çekirdek Servisler:                                   │
+│  - DockerLogDemuxer (Sıfır bellek tahsisli log demux)  │
+│  - NotificationService (Discord, Telegram, Ntfy, Web)  │
+│  - EventBroadcaster (SSE için Channel<ServerEventDto>) │
+│  - AuthService (Zero-Trust SSO + Session Cookies)      │
+├────────────────────────────────────────────────────────┤
+│  Arka Plan Servisleri:                                 │
+│  - ContainerDiscoveryService (10s)                     │
+│  - SystemMetricsCollector (15s)                        │
+│  - UptimeCheckerService (TCP Ping, SSL, Snitch - 60s)  │
+│  - RetentionCleanupService (24h)                       │
+└────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🚀 Docker Compose ile Hızlı Başlangıç
+
+Bir `docker-compose.yml` dosyası oluşturun:
+
+```yaml
+services:
+  corvus:
+    image: ghcr.io/brhnshn/corvus:latest
+    container_name: corvus
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    environment:
+      - CORVUS_PORT=8090
+      - CORVUS_DATA_DIR=/data
+      - DOCKER_SOCKET=/var/run/docker.sock
+      - CORVUS_AUTH_ENABLED=true
+    volumes:
+      # Yaşam döngüsü kontrolleri (Start/Stop/Restart) için okuma-yazma soket erişimi:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Kalıcı SQLite veritabanı alanı
+      - corvus-data:/data
+
+volumes:
+  corvus-data:
+```
+
+Konteyneri başlatın:
+
+```bash
+docker compose up -d
+```
+
+Tarayıcınızdan **`http://localhost:8090`** adresine (veya şifresiz durum sayfası için **`http://localhost:8090/status`** adresine) gidin.
+
+---
+
+## 🏷️ Docker Konteyner Etiketleri (Labels)
+
+Konteynerlerinizi Docker Compose dosyalarınızda Corvus etiketleri ile tanımlayabilirsiniz:
+
+```yaml
+labels:
+  - "corvus.name=Nextcloud Hub"
+  - "corvus.category=Bulut Depolama"
+  - "corvus.description=Kişisel dosya senkronizasyonu"
+  - "corvus.url=https://cloud.example.com"
+  - "corvus.healthcheck=https://cloud.example.com/status.php"
+  - "corvus.icon=cloud"
+  - "corvus.ignore=false"
+```
+
+---
+
+## 📡 API Uç Noktaları Özeti
+
+| Metot & Yol | Açıklama |
+|---|---|
+| `GET /api/dashboard/summary` | Konsolide KPI ve durum özeti |
+| `GET /api/services` | Servis kataloğu, sıralama ve SSL bilgileri |
+| `PUT /api/services/reorder` | Servislerin görsel sıralamasını kaydeder |
+| `GET /api/status-page` | Halka açık şifresiz sistem durum özeti |
+| `GET /api/containers` | Konteyner listesi, durumları ve portları |
+| `GET /api/containers/{id}/stats` | Anlık konteyner CPU%, RAM ve Net I/O verisi |
+| `GET /api/containers/{id}/logs` | Son konteyner log satırları |
+| `GET /api/containers/{id}/logs/stream` | Gerçek zamanlı SSE log akışı |
+| `POST /api/containers/{id}/start` | Konteyneri başlatır |
+| `POST /api/containers/{id}/stop` | Konteyneri durdurur |
+| `POST /api/containers/{id}/pause` | Konteyneri duraklatır |
+| `POST /api/containers/{id}/unpause` | Konteyneri devam ettirir |
+| `POST /api/containers/{id}/restart` | Konteyneri yeniden başlatır |
+| `GET /api/push-monitors` | Dead Man's Snitch monitörlerini listeler |
+| `POST /api/push-monitors` | Yeni push monitörü oluşturur |
+| `POST /api/push/{token}` | Cron ve yedekleme ping sinyali |
+| `POST /api/notifications/test` | Test bildirimi gönderir (Discord, Telegram, Ntfy, Webhook) |
+| `GET /api/stream/events` | Server-Sent Events canlı durum akışı |
+| `GET /api/auth/status` | Mevcut oturum ve Zero-Trust SSO tespiti |
+
+---
+
+## 🛠️ Kaynak Koddan Geliştirme ve Derleme
+
+### Gereksinimler
+- [.NET 9.0 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
+- [Node.js 20+](https://nodejs.org/)
+
+### Projeyi Derleme
+1. **Frontend:**
+   ```bash
+   cd src/Corvus.Web
+   npm install
+   npm run build
+   ```
+2. **Backend:**
+   ```bash
+   cd ../Corvus.Api
+   dotnet run
+   ```
+3. **Testleri Çalıştırma:**
+   ```bash
+   dotnet test tests/Corvus.Api.Tests
+   ```
+
+---
+
+## 📄 Lisans
+
+Bu proje [MIT Lisansı](LICENSE) altında lisanslanmıştır.

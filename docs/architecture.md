@@ -1,94 +1,102 @@
-# Corvus — Klasör ve Sistem Mimarisi
+<div align="center">
 
-Bu doküman, Corvus'un güncel dosya ve katman mimarisini, servislerini ve veri akışını belgeler.
+[![English](https://img.shields.io/badge/Language-English-blue?style=for-the-badge)](architecture.md)
+[![Türkçe](https://img.shields.io/badge/Dil-T%C3%BCrk%C3%A7e-red?style=for-the-badge)](architecture.tr.md)
+
+</div>
+
+# Corvus — Repository and System Architecture
+
+This document specifies the current file organization, layered architecture, background services, and data flow of Corvus.
 
 ---
 
-## 📁 Dizin Yapısı
+## 📁 Directory Structure
 
 ```
 corvus/
 ├── docker-compose.yml
 ├── Dockerfile                    # Multi-stage: Frontend build + .NET 9 AOT build + minimal runtime
-├── README.md
+├── README.md                     # Project overview and quick start (English)
+├── README.tr.md                  # Project overview and quick start (Türkçe)
 ├── LICENSE
 │
 ├── src/
 │   ├── Corvus.Api/                # Backend — ASP.NET Core Minimal API, .NET 9 Native AOT
-│   │   ├── Program.cs             # Uygulama girişi, DI ve Minimal API eşlemeleri
+│   │   ├── Program.cs             # Application entry point, DI, and Minimal API mapping
 │   │   ├── Corvus.Api.csproj
-│   │   ├── Endpoints/             # Kaynak bazlı Minimal API uç noktaları
-│   │   │   ├── ServicesEndpoints.cs      # Servis CRUD, /reorder ve şifresiz /status-page
-│   │   │   ├── ContainersEndpoints.cs    # Containers, /stats, /logs, /logs/stream ve lifecycle kontrolleri
-│   │   │   ├── MetricsEndpoints.cs       # Sistem metrikleri zaman serisi
-│   │   │   ├── UptimeEndpoints.cs        # Servis uptime geçmişi
-│   │   │   ├── PushEndpoints.cs          # Push webhooks ve Dead Man's Snitch (/push-monitors)
-│   │   │   ├── NotificationEndpoints.cs  # Çok kanallı alarm test uç noktası
-│   │   │   ├── StreamEndpoints.cs        # Canlı SSE olay akışı (/api/stream/events)
-│   │   │   ├── DashboardEndpoints.cs     # Dashboard KPI özeti
-│   │   │   └── AuthEndpoints.cs          # Session auth, kayıt yönetimi ve Zero-Trust SSO
-│   │   ├── BackgroundServices/    # Arka plan çalışan iş parçacıkları
-│   │   │   ├── ContainerDiscoveryService.cs  # Docker socket periyodik konteyner senkronizasyonu
-│   │   │   ├── SystemMetricsCollector.cs     # Host CPU/RAM/Disk/Net metrik toplayıcısı
-│   │   │   ├── UptimeCheckerService.cs       # HTTP/TCP ping, SSL sertifika ve Snitch denetimi
-│   │   │   └── RetentionCleanupService.cs    # Zaman aşımına uğrayan kayıtları temizleme (24h)
-│   │   ├── Data/                  # Veri erişim katmanı (Dapper.AOT + SQLite)
-│   │   │   ├── DbConnectionFactory.cs        # SQLite WAL, busy_timeout=5000 ve PRAGMA optimizasyonları
-│   │   │   ├── DatabaseMigrator.cs           # DbUp göç yöneticisi
-│   │   │   ├── ServicesRepository.cs         # Servis ve override sorguları
-│   │   │   ├── PushMonitorRepository.cs      # Dead Man's Snitch veri erişimi
-│   │   │   ├── UptimeRepository.cs           # Uptime geçmişi
-│   │   │   ├── MetricsRepository.cs          # Host metrikleri
-│   │   │   ├── BackupRepository.cs           # Push backup logları
-│   │   │   ├── UserRepository.cs             # Kullanıcı hesapları
-│   │   │   ├── SettingsRepository.cs         # Key-value ayarlar
-│   │   │   └── Migrations/                   # Sıralı göç SQL dosyaları
+│   │   ├── Endpoints/             # Resource-oriented Minimal API endpoints
+│   │   │   ├── ServicesEndpoints.cs      # Service CRUD, /reorder, and unauthenticated /status-page
+│   │   │   ├── ContainersEndpoints.cs    # Containers, /stats, /logs, /logs/stream, and lifecycle controls
+│   │   │   ├── MetricsEndpoints.cs       # Host system metrics time-series
+│   │   │   ├── UptimeEndpoints.cs        # Service uptime check history
+│   │   │   ├── PushEndpoints.cs          # Push webhooks and Dead Man's Snitch (/push-monitors)
+│   │   │   ├── NotificationEndpoints.cs  # Multi-channel alert test endpoint
+│   │   │   ├── StreamEndpoints.cs        # Live Server-Sent Events stream (/api/stream/events)
+│   │   │   ├── DashboardEndpoints.cs     # Dashboard aggregated KPI summary
+│   │   │   └── AuthEndpoints.cs          # Session auth, registration toggle, and Zero-Trust SSO
+│   │   ├── BackgroundServices/    # Continuous background worker threads
+│   │   │   ├── ContainerDiscoveryService.cs  # Docker socket periodic container discovery (10s)
+│   │   │   ├── SystemMetricsCollector.cs     # Host CPU/RAM/Disk/Net metrics sampler (15s)
+│   │   │   ├── UptimeCheckerService.cs       # HTTP/TCP ping, SSL cert tracking, and Snitch checks (60s)
+│   │   │   └── RetentionCleanupService.cs    # Rolling window data cleanup (24h)
+│   │   ├── Data/                  # Persistence and data access layer (Dapper.AOT + SQLite)
+│   │   │   ├── DbConnectionFactory.cs        # SQLite WAL, busy_timeout=5000, and PRAGMA tuning
+│   │   │   ├── DatabaseMigrator.cs           # DbUp sequential migration runner
+│   │   │   ├── ServicesRepository.cs         # Service definition and override queries
+│   │   │   ├── PushMonitorRepository.cs      # Dead Man's Snitch data access
+│   │   │   ├── UptimeRepository.cs           # Uptime history data access
+│   │   │   ├── MetricsRepository.cs          # Host telemetry time-series storage
+│   │   │   ├── BackupRepository.cs           # Push backup event logs
+│   │   │   ├── UserRepository.cs             # User accounts and password hashing
+│   │   │   ├── SettingsRepository.cs         # Key-value dynamic application settings
+│   │   │   └── Migrations/                   # Ordered migration SQL scripts
 │   │   │       ├── 001_init.sql
 │   │   │       ├── 002_add_users.sql
 │   │   │       └── 003_roadmap_features.sql
-│   │   ├── Models/                 # DTO'lar ve Veritabanı Varlıkları
-│   │   │   ├── Service.cs                    # Servis modeli (check_type, port, ssl, is_public, display_order)
-│   │   │   ├── ServiceOverride.cs            # Docker override modeli
-│   │   │   ├── PushMonitor.cs                # Dead Man's Snitch modeli
-│   │   │   ├── DockerModels.cs               # Docker API modelleri
-│   │   │   ├── SystemMetric.cs               # Host metrik modeli
-│   │   │   ├── UptimeCheck.cs                # Uptime kayıt modeli
-│   │   │   ├── BackupEvent.cs                # Backup push modeli
-│   │   │   ├── User.cs                       # Kullanıcı modeli
+│   │   ├── Models/                 # DTOs and Database Entities
+│   │   │   ├── Service.cs                    # Service entity (check_type, port, ssl, is_public, display_order)
+│   │   │   ├── ServiceOverride.cs            # Docker label override model
+│   │   │   ├── PushMonitor.cs                # Dead Man's Snitch entity
+│   │   │   ├── DockerModels.cs               # Docker Engine API schemas
+│   │   │   ├── SystemMetric.cs               # System hardware metrics sample
+│   │   │   ├── UptimeCheck.cs                # Health check audit log
+│   │   │   ├── BackupEvent.cs                # External push backup ping
+│   │   │   ├── User.cs                       # User authentication entity
 │   │   │   └── CorvusJsonSerializerContext.cs # .NET 9 Native AOT JsonSourceGeneration context
-│   │   └── Services/                # İş mantığı servisleri
-│   │       ├── DockerHttpClient.cs           # SocketsHttpHandler ile Docker REST istemcisi
-│   │       ├── DockerService.cs              # Konteyner işlemleri ve etiket eşleme
-│   │       ├── DockerLogDemuxer.cs           # Multiplexed Docker log akış ayrıştırıcısı
-│   │       ├── NotificationService.cs        # Discord, Telegram, Ntfy ve Webhook alarm motoru
-│   │       ├── EventBroadcaster.cs           # Bounded Channel SSE olay yayıncısı
+│   │   └── Services/                # Core domain business logic
+│   │       ├── DockerHttpClient.cs           # SocketsHttpHandler direct socket client
+│   │       ├── DockerService.cs              # Container operations, stats, and label parsing
+│   │       ├── DockerLogDemuxer.cs           # Zero-alloc multiplexed Docker stdout/stderr demuxer
+│   │       ├── NotificationService.cs        # Multi-channel alert dispatcher (Discord, Telegram, Ntfy, Webhook)
+│   │       ├── EventBroadcaster.cs           # Bounded Channel SSE real-time event publisher
 │   │       └── AuthService.cs                # Zero-Trust SSO proxy headers & SHA-256 session auth
 │   │
 │   └── Corvus.Web/                 # Frontend — TypeScript + React 19 + Vite + Tailwind CSS v4
-│       ├── vite.config.ts          # manualChunks ile optimize edilmiş Vite yapılandırması
+│       ├── vite.config.ts          # Optimized Vite build with manual vendor chunks
 │       ├── src/
 │       │   ├── main.tsx
-│       │   ├── App.tsx             # React.lazy rota kod ayrıştırma (code-splitting) & SSE bağlantısı
-│       │   ├── pages/              # Uygulama ve Durum Sayfaları
-│       │   │   ├── Dashboard.tsx        # KPI özeti ve anlık durum
-│       │   │   ├── Services.tsx         # Servis launcher, sıralama ve SSL rozetleri
-│       │   │   ├── Containers.tsx       # Canlı stats, Compose stack gruplama, yaşam döngüsü
-│       │   │   ├── SystemMetrics.tsx    # Recharts host zaman serisi
-│       │   │   ├── Uptime.tsx           # Uptime grafikleri ve Dead Man's Snitch sekmesi
-│       │   │   ├── Settings.tsx         # Çok kanallı alarm ayarları ve kullanıcı tercihleri
-│       │   │   ├── AuthPage.tsx         # Giriş ve kayıt ekranı
-│       │   │   └── PublicStatus.tsx     # Şifresiz halka açık durum sayfası (/status)
-│       │   ├── components/         # Ortak bileşenler
-│       │   │   ├── Sidebar.tsx          # Masaüstü kalıcı, mobil/tablet slide-over drawer
-│       │   │   ├── ContainerLogsModal.tsx # Canlı log terminal modalı
+│       │   ├── App.tsx             # React.lazy route code-splitting & SSE streaming listener
+│       │   ├── pages/              # Application pages and status views
+│       │   │   ├── Dashboard.tsx        # Aggregated KPI overview and live activity
+│       │   │   ├── Services.tsx         # Service catalog launcher, reordering, and SSL badges
+│       │   │   ├── Containers.tsx       # Live stats, Compose project accordion, lifecycle actions
+│       │   │   ├── SystemMetrics.tsx    # Recharts hardware utilization charts
+│       │   │   ├── Uptime.tsx           # Uptime history and Dead Man's Snitch tab
+│       │   │   ├── Settings.tsx         # Alert channel setup and user preferences
+│       │   │   ├── AuthPage.tsx         # Sign in and initial registration view
+│       │   │   └── PublicStatus.tsx     # Unauthenticated public status page (/status)
+│       │   ├── components/         # Shared UI components
+│       │   │   ├── Sidebar.tsx          # Responsive desktop rail and mobile/tablet slide-over drawer
+│       │   │   ├── ContainerLogsModal.tsx # Terminal modal for live container logs
 │       │   │   ├── RegistrationPromptModal.tsx
 │       │   │   └── StatusBadge.tsx
 │       │   └── api/
-│       │       └── client.ts            # Tip güvenli fetch istemcisi
-│       └── wwwroot/                # Derlenmiş statik dosyaların çıktığı yer
+│       │       └── client.ts            # Type-safe API client wrapper
+│       └── wwwroot/                # Production compiled bundle output
 │
 ├── tests/
-│   └── Corvus.Api.Tests/           # xUnit Test Projesi (34 Test)
+│   └── Corvus.Api.Tests/           # xUnit Test Suite (34 Passing Tests)
 │       ├── AuthServiceTests.cs
 │       ├── DockerServiceTests.cs
 │       ├── DockerLogDemuxerTests.cs
@@ -96,28 +104,30 @@ corvus/
 │       ├── RoadmapFeaturesTests.cs
 │       └── DatabaseMigrationAndRepositoryTests.cs
 │
-└── docs/                           # Proje teknik şartname, analiz ve tasarım dokümanları
-    ├── architecture.md             # Bu doküman
-    ├── specification.md            # Detaylı teknik şartname
-    ├── scope.md                    # Kapsam ve sınırlar
-    ├── design-system.md            # Tasarım sistemi
-    └── research/
-        └── corvus_roadmap_and_ecosystem_analysis.md
+└── docs/                           # Technical specifications and architectural guides
+    ├── architecture.md             # System architecture (English)
+    ├── architecture.tr.md          # Sistem mimarisi (Türkçe)
+    ├── specification.md            # Technical specification (English)
+    ├── specification.tr.md         # Teknik şartname (Türkçe)
+    ├── scope.md                    # Project scope and boundaries (English)
+    ├── scope.tr.md                 # Kapsam ve sınırlar (Türkçe)
+    ├── design-system.md            # UI design tokens and system (English)
+    └── design-system.tr.md         # Tasarım sistemi (Türkçe)
 ```
 
 ---
 
-## ⚡ Temel Mimari Prensipler
+## ⚡ Core Architectural Principles
 
-1. **Native AOT Uyumluluğu:** 
-   - Backend genelinde çalışma zamanı yansıması (reflection) kesinlikle kullanılmaz.
-   - Tüm JSON serileştirme işlemleri `CorvusJsonSerializerContext` üzerinden kaynak üretimiyle (source generation) yapılır.
-   - Veritabanı sorguları `Dapper.AOT` ile derleme zamanında tip denetiminden geçer.
+1. **Native AOT Compliance:** 
+   - Runtime reflection is completely eliminated across the entire backend.
+   - All JSON serialization leverages compile-time source generation via `CorvusJsonSerializerContext`.
+   - Database operations use `Dapper.AOT` for compile-time verified parameter mapping.
 
-2. **Düşük Bellek ve Yüksek Başarım:**
-   - Docker daemon iletişimi harici kütüphane bağımlılığı olmaksızın doğrudan soket seviyesinde `SocketsHttpHandler` ile yürütülür.
-   - Konteyner log akışları `DockerLogDemuxer` ile sıfır bellek ayırmalı (zero allocation) olarak ayrıştırılır.
-   - SQLite veritabanı `WAL` kipinde `PRAGMA busy_timeout = 5000` ve `temp_store = MEMORY` ile eşzamanlı kilitlenme yaşamaksızın yüksek başarım sağlar.
+2. **Ultra-Low Memory Footprint & High Performance:**
+   - Docker daemon communication communicates directly over Unix domain sockets or Windows named pipes via `SocketsHttpHandler` without third-party wrapper overhead.
+   - Live container log streaming is processed via zero-allocation header demultiplexing (`DockerLogDemuxer`).
+   - SQLite operates in `WAL` mode with `PRAGMA busy_timeout = 5000` and `temp_store = MEMORY` to eliminate database concurrency lock contention.
 
-3. **Frontend Optimizasyonu:**
-   - Rotalar `React.lazy` ile parçalara ayrılarak ilk yükleme paketi 200 KB'ın altında tutulur; Recharts, Lucide ve React vendor chunk'ları ayrıştırılmıştır.
+3. **Frontend Optimization:**
+   - Routes are loaded dynamically via `React.lazy`, keeping the initial entry chunk under 200 KB. Recharts, Lucide, and React runtime dependencies are split into dedicated vendor cache chunks.

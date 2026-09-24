@@ -1,42 +1,49 @@
-# Corvus — Kapsam ve Mimari İlkeler
+<div align="center">
 
-## 1. Temel İlke
+[![English](https://img.shields.io/badge/Language-English-blue?style=for-the-badge)](scope.md)
+[![Türkçe](https://img.shields.io/badge/Dil-T%C3%BCrk%C3%A7e-red?style=for-the-badge)](scope.tr.md)
 
-Corvus, belirli bir kişinin veya kurulumun paneli değildir. Açık kaynak bir proje olarak **herhangi bir self-hosted sunucu için genel bir izleme + launcher paneli**dir. Geliştiricinin kendi sunucusu (Coolify + Caddy + Tailscale tabanlı kurulum) yalnızca ilk geliştirme/test senaryosudur — ürün hiçbir sağlayıcıya bağımlı değildir.
+</div>
 
----
+# Corvus — Scope & Architectural Principles
 
-## 2. Servis Keşfi: İki Modlu Yaklaşım
+## 1. Foundational Principle
 
-### A) Otomatik Keşif (varsayılan)
-- Docker socket'e bağlanıp sunucuda çalışan container'ları otomatik algılar
-- Herhangi bir reverse proxy'e (Caddy, Traefik, Nginx) veya orkestrasyon aracına (Coolify, Portainer) bağımlı değildir — standart Docker API'sini kullanır
-- Container bilgisi (isim, port, durum, kaynak kullanımı) otomatik çekilir
-- Docker label'ları (`corvus.name`, `corvus.category`, `corvus.url`, `corvus.healthcheck`, `corvus.icon`, `corvus.ignore`) üzerinden metadata zenginleştirilebilir
-- Docker Compose projelerine göre otomatik hiyerarşik gruplama (`com.docker.compose.project`) desteklenir
-
-### B) Manuel Ekleme
-- Docker socket'in erişemediği servisler için (uzak sunucu, harici SaaS, IoT cihaz, farklı bir ağdaki servis)
-- Kullanıcı arayüzden URL/IP, isim, kategori, açıklama, kontrol türü (HTTP/HTTPS veya TCP Port Ping) ve halka açık durum sayfası görünürlüğü tanımlayabilir
-- Servisler arayüzden yukarı/aşağı butonlarıyla özel olarak sıralanabilir (`display_order`)
+Corvus is not tailored for a single individual or specific private infrastructure. As an open-source project, it serves as a **universal service launcher and unified monitoring dashboard for any self-hosted node**. The original author's development environment merely serves as an initial testbed — the application has zero mandatory dependencies on specific vendors.
 
 ---
 
-## 3. Dış Bağımsızlık ve Entegrasyon Çerçevesi
+## 2. Service Discovery: Dual-Mode Architecture
 
-| Alan | Kişisel kurulum | Corvus Genel Yaklaşımı |
+### A) Automated Discovery (Default)
+- Connects directly to the local Docker socket and automatically identifies active containers.
+- Operates independently of any reverse proxy (Caddy, Traefik, Nginx) or orchestration tool (Coolify, Portainer) by querying the standard Docker Engine API.
+- Ingests container metadata (name, port mappings, runtime status, resource utilization) without requiring external agents.
+- Metadata can be extended via Docker labels (`corvus.name`, `corvus.category`, `corvus.url`, `corvus.healthcheck`, `corvus.icon`, `corvus.ignore`).
+- Automatically organizes multi-container stacks by their Docker Compose project names (`com.docker.compose.project`).
+
+### B) Manual Registration
+- Supports arbitrary endpoints that the Docker daemon cannot directly inspect (remote VPS instances, external SaaS APIs, IoT devices, distinct networks).
+- Users can define custom target URLs/IPs, friendly names, category groups, descriptions, check types (HTTP/HTTPS or TCP Port Ping), and visibility on the public status page.
+- Services can be custom ordered via drag-and-drop or visual reordering arrows (`display_order`).
+
+---
+
+## 3. Infrastructure Independence & Integration Framework
+
+| Domain | Private Setup Example | Corvus Universal Approach |
 |---|---|---|
-| Reverse proxy | Caddy | Herhangi bir proxy ile çalışır. Ters vekil başlıkları (`Tailscale-User-Login`, `Cf-Access-Authenticated-User-Email`, `Remote-User`, `X-Forwarded-User`) üzerinden Zero-Trust SSO otomatik desteklenir. |
-| Orkestrasyon | Coolify / Portainer | Doğrudan standart Docker socket (`/var/run/docker.sock`) okur, harici araca bağımlı değildir. |
-| Ağ / VPN | Tailscale | Özel ağ gerektirmez; yerel ağ, WireGuard veya açık internet üzerinde eşit kararlılıkla çalışır. |
-| Backup / Cron Bildirimi | `/opt/scripts/backup.sh` | **Dead Man's Snitch** push altyapısı (`/api/push/{token}`). Beklenen periyot ve tolerans süresi aşıldığında otomatik alarm üretir. |
-| Alarm ve Bildirim | — | Çok kanallı yerleşik bildirim motoru: Discord, Telegram, Ntfy/Gotify ve Generic Webhook. |
-| Canlı İletişim | — | Server-Sent Events (SSE) ile `/api/stream/events` ve gerçek zamanlı konteyner log akışı (`/api/containers/{id}/logs/stream`). |
+| Reverse Proxy | Caddy | Compatible with any reverse proxy. Automatically detects Zero-Trust SSO headers (`Tailscale-User-Login`, `Cf-Access-Authenticated-User-Email`, `Remote-User`, `X-Forwarded-User`). |
+| Orchestration | Coolify / Portainer | Interacts directly with the standard Docker socket (`/var/run/docker.sock`); no external orchestration dependencies required. |
+| Networking / VPN | Tailscale | Requires no specific VPN layer; functions identically across LAN, WireGuard, Tailscale, or the public Internet. |
+| Backup / Cron Monitoring | `/opt/scripts/backup.sh` | **Dead Man's Snitch** push infrastructure (`/api/push/{token}`). Automatically dispatches alerts when expected intervals and grace windows expire. |
+| Alerting & Notifications | — | Built-in multi-channel alerting: Discord, Telegram, Ntfy/Gotify, and generic HTTP Webhooks. |
+| Real-Time Communication | — | Server-Sent Events (SSE) via `/api/stream/events` and real-time container log streaming (`/api/containers/{id}/logs/stream`). |
 
 ---
 
-## 4. UI ve Tasarım İlkeleri
+## 4. UI & Design Principles
 
-- Tamamen mobil ve tablet duyarlı: Slide-over drawer, sticky mobil başlık, çift modlu tablolar ve kartlar.
-- Halka Açık Durum Sayfası: Giriş gerektirmeyen, bağımsız `/status` arayüzü.
-- Performans: Rotalar `React.lazy` ile bölünmüş, vendor paketleri ayrıştırılmış, Vite minification limitlerine (<200 KB) tam uyumlu.
+- Responsive Mobile & Tablet First: Slide-over drawer navigation, sticky top bar, dual-mode responsive tables and cards.
+- Public Status Page: Dedicated, unauthenticated `/status` overview for external users and clients.
+- Performance: Code-split routes via `React.lazy`, isolated vendor chunks, adhering to production asset budgets (<200 KB initial chunk).
