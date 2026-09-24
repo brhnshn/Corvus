@@ -23,11 +23,17 @@ public class UpdateCheckerTests
 
     [Theory]
     [InlineData("1.0.1", "1.0.0", true)]
-    [InlineData("1.1.0", "1.0.9", true)]
-    [InlineData("2.0.0", "1.9.9", true)]
+    [InlineData("1.0.10", "1.0.9", true)]
+    [InlineData("1.0.100", "1.0.99", true)]
+    [InlineData("1.0.100", "1.0.9", true)]
+    [InlineData("1.0.101", "1.0.100", true)]
+    [InlineData("1.1.0", "1.0.100", true)]
+    [InlineData("2.0.0", "1.99.100", true)]
     [InlineData("v1.0.2", "v1.0.1", true)]
     [InlineData("1.0.0", "1.0.0", false)]
+    [InlineData("1.0.100", "1.0.100", false)]
     [InlineData("0.9.9", "1.0.0", false)]
+    [InlineData("1.0.99", "1.0.100", false)]
     [InlineData("1.0.0", "1.0.1", false)]
     public void IsNewerVersion_CorrectlyComparesSemVer(string latest, string current, bool expected)
     {
