@@ -65,7 +65,19 @@ public class DockerService : IDockerService
         var stats = await _client.GetContainerStatsAsync(containerId, cancellationToken);
         if (stats != null)
         {
-            _statsCache[containerId] = (DateTime.UtcNow.AddSeconds(3), stats);
+            var now = DateTime.UtcNow;
+            _statsCache[containerId] = (now.AddSeconds(3), stats);
+
+            if (_statsCache.Count > 30)
+            {
+                foreach (var kvp in _statsCache)
+                {
+                    if (now > kvp.Value.Expiry)
+                    {
+                        _statsCache.TryRemove(kvp.Key, out _);
+                    }
+                }
+            }
         }
 
         return stats;

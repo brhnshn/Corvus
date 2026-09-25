@@ -33,7 +33,11 @@ ARG APP_VERSION=1.0.0
 ENV CORVUS_PORT=8090 \
     CORVUS_DATA_DIR=/data \
     DOCKER_SOCKET=/var/run/docker.sock \
-    CORVUS_VERSION=${APP_VERSION}
+    CORVUS_VERSION=${APP_VERSION} \
+    DOTNET_gcServer=0 \
+    DOTNET_GCDynamicAdaptationMode=1 \
+    DOTNET_GCConserveMemory=5 \
+    MALLOC_TRIM_THRESHOLD_=131072
 
 EXPOSE 8090
 VOLUME ["/data"]
