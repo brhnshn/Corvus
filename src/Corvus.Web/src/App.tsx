@@ -195,7 +195,7 @@ export const App: React.FC = () => {
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <DashboardPage />;
+        return <DashboardPage onNavigate={navigateTo} />;
       case 'services':
         return <ServicesPage />;
       case 'containers':
@@ -207,7 +207,7 @@ export const App: React.FC = () => {
       case 'settings':
         return <SettingsPage />;
       default:
-        return <DashboardPage />;
+        return <DashboardPage onNavigate={navigateTo} />;
     }
   };
 
