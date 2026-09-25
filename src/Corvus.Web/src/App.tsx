@@ -77,34 +77,67 @@ export const App: React.FC = () => {
     }
   }, [isStatusPath]);
 
-  // Roadmap 2.1: Server-Sent Events (SSE) Canlı Veri Yayını Bağlantısı
+  // Server-Sent Events (SSE) — Canlı Veri Yayını Bağlantısı
+  // onerror: bağlantı kesilince EventSource otomatik yeniden bağlanır;
+  // bu davranış konsolu spamlar. Manuel backoff ile kontrol ediyoruz.
   useEffect(() => {
     if (isStatusPath) return;
 
     let eventSource: EventSource | null = null;
-    try {
-      eventSource = new EventSource('/api/stream/events');
-      eventSource.onmessage = (event) => {
-        try {
-          const parsed = JSON.parse(event.data);
-          window.dispatchEvent(new CustomEvent('corvus_event', { detail: parsed }));
-          // SSE olaylarına göre ilgili cache verilerini temizle
-          if (parsed.type?.includes('container')) {
-            invalidateCache('/containers');
-            invalidateCache('/dashboard');
-          } else if (parsed.type?.includes('service')) {
-            invalidateCache('/services');
-            invalidateCache('/dashboard');
+    let retryCount = 0;
+    const MAX_RETRIES = 5;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const connect = () => {
+      try {
+        eventSource = new EventSource('/api/stream/events');
+
+        eventSource.onopen = () => {
+          retryCount = 0; // Bağlantı başarılıysa sayacı sıfırla
+        };
+
+        eventSource.onmessage = (event) => {
+          try {
+            const parsed = JSON.parse(event.data);
+            window.dispatchEvent(new CustomEvent('corvus_event', { detail: parsed }));
+            if (parsed.type?.includes('container')) {
+              invalidateCache('/containers');
+              invalidateCache('/dashboard');
+            } else if (parsed.type?.includes('service')) {
+              invalidateCache('/services');
+              invalidateCache('/dashboard');
+            }
+          } catch {
+            // keepalive/ping mesajları JSON olmayabilir
           }
-        } catch {
-          // ignore keepalive/ping
-        }
-      };
-    } catch (e) {
-      console.warn('SSE bağlantısı kurulamadı:', e);
-    }
+        };
+
+        eventSource.onerror = () => {
+          // EventSource hata alınca kendi başına reconnect dener;
+          // bunu önlemek için kapatıp kendi backoff'umuzu kullanırız.
+          eventSource?.close();
+          eventSource = null;
+
+          if (retryCount >= MAX_RETRIES) {
+            // 5 denemeden sonra vazgeç, console.warn bir kez bas
+            console.warn('[SSE] Bağlantı kurulamadı, yeniden deneme durduruldu.');
+            return;
+          }
+
+          const delay = Math.min(1000 * 2 ** retryCount, 30000); // 1s, 2s, 4s … max 30s
+          retryCount++;
+          retryTimer = setTimeout(connect, delay);
+        };
+      } catch (e) {
+        // EventSource constructor başarısız (çok nadir, güvenli ortam gerektirebilir)
+        console.warn('[SSE] EventSource oluşturulamadı:', e);
+      }
+    };
+
+    connect();
 
     return () => {
+      if (retryTimer) clearTimeout(retryTimer);
       eventSource?.close();
     };
   }, [isStatusPath]);

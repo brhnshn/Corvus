@@ -120,22 +120,14 @@ export const ServicesPage: React.FC = () => {
     getCategory: (s) => s.category || t('groups.general'),
     storageKey: 'corvus_services',
     onUpdateCategory: async (id, newCat) => {
+      // Optimistic UI: local state hemen güncellenir
       setServices(prev => prev.map(s => s.id === id ? { ...s, category: newCat } : s));
-      try {
-        await api.updateService(id, { category: newCat });
-      } catch (err) {
-        console.error('Kategori güncellenemedi:', err);
-        await loadServices();
-      }
+      // API çağrısı sessizce denir; hata durumunda local override zaten grouping hook'ta korunuyor
+      await api.updateService(id, { category: newCat });
     },
     onBatchUpdateCategory: async (ids, newCat) => {
       setServices(prev => prev.map(s => ids.includes(s.id) ? { ...s, category: newCat } : s));
-      try {
-        await Promise.allSettled(ids.map(id => api.updateService(id, { category: newCat })));
-      } catch (err) {
-        console.error('Kategoriler güncellenemedi:', err);
-        await loadServices();
-      }
+      await Promise.allSettled(ids.map(id => api.updateService(id, { category: newCat })));
     }
   });
 

@@ -143,7 +143,13 @@ export function useEntityGrouping<T>({
     });
 
     if (onUpdateCategory) {
-      await onUpdateCategory(itemId, cleanTarget);
+      try {
+        await onUpdateCategory(itemId, cleanTarget);
+      } catch (err) {
+        // Kategori güncellemesi API tarafında başarısız olsa bile
+        // LocalStorage'daki local override korunur; UI tutarlı kalır
+        console.warn('[grouping] onUpdateCategory başarısız (local override korunuyor):', err);
+      }
     }
   }, [overridesStorageKey, onUpdateCategory]);
 
@@ -190,9 +196,17 @@ export function useEntityGrouping<T>({
     });
 
     if (onBatchUpdateCategory) {
-      await onBatchUpdateCategory(itemIds, cleanNew);
+      try {
+        await onBatchUpdateCategory(itemIds, cleanNew);
+      } catch (err) {
+        console.warn('[grouping] onBatchUpdateCategory başarısız (local override korunuyor):', err);
+      }
     } else if (onUpdateCategory) {
-      await Promise.allSettled(itemIds.map(id => onUpdateCategory(id, cleanNew)));
+      try {
+        await Promise.allSettled(itemIds.map(id => onUpdateCategory(id, cleanNew)));
+      } catch (err) {
+        console.warn('[grouping] onUpdateCategory (batch) başarısız:', err);
+      }
     }
   }, [groups, getId, overridesStorageKey, collapseStorageKey, onBatchUpdateCategory, onUpdateCategory]);
 
