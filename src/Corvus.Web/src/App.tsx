@@ -79,9 +79,10 @@ export const App: React.FC = () => {
 
   // Server-Sent Events (SSE) — Canlı Veri Yayını Bağlantısı (Uptime Kuma Dayanıklılık Mimarisi)
   // Ağ kopsa bile asla pes etmez; backoff ile dener, internet geri geldiğinde veya
-  // sekme odaklandığında anında yeniden bağlanıp önbelleği geçersiz kılar.
   useEffect(() => {
     if (isStatusPath) return;
+    if (authLoading) return;
+    if (authStatus && authStatus.authEnabled && !authStatus.isAuthenticated) return;
 
     let eventSource: EventSource | null = null;
     let retryCount = 0;
@@ -170,7 +171,7 @@ export const App: React.FC = () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       eventSource?.close();
     };
-  }, [isStatusPath]);
+  }, [isStatusPath, authLoading, authStatus?.isAuthenticated, authStatus?.authEnabled]);
 
   const getPageTitle = (page: PageId) => {
     switch (page) {

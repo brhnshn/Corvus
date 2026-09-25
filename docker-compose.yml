@@ -10,6 +10,8 @@ services:
       - CORVUS_DATA_DIR=/data
       - DOCKER_SOCKET=/var/run/docker.sock
       - CORVUS_AUTH_ENABLED=true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       # Docker socket mount:
       # Use '/var/run/docker.sock:/var/run/docker.sock:ro' for read-only monitoring.

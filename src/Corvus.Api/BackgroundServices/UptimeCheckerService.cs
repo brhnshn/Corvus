@@ -200,6 +200,104 @@ public class UptimeCheckerService : BackgroundService
         return trimmed;
     }
 
+    private static bool IsLoopbackHost(string host)
+    {
+        return host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+               host == "127.0.0.1" ||
+               host == "::1";
+    }
+
+    private static string? _cachedResolvedLoopback;
+    private static readonly object _loopbackLock = new();
+
+    private static string ResolveContainerLoopback()
+    {
+        if (_cachedResolvedLoopback != null)
+        {
+            return _cachedResolvedLoopback;
+        }
+
+        lock (_loopbackLock)
+        {
+            if (_cachedResolvedLoopback != null)
+            {
+                return _cachedResolvedLoopback;
+            }
+
+            // 1. Ortam değişkeniyle manuel belirtilmişse öncelik ver
+            string? overrideHost = Environment.GetEnvironmentVariable("CORVUS_HOST_GATEWAY")
+                                ?? Environment.GetEnvironmentVariable("CORVUS_INTERNAL_HOST");
+            if (!string.IsNullOrWhiteSpace(overrideHost))
+            {
+                return _cachedResolvedLoopback = overrideHost.Trim();
+            }
+
+            // 2. Container içinde miyiz?
+            bool inContainer = File.Exists("/.dockerenv") ||
+                               string.Equals(Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"), "true", StringComparison.OrdinalIgnoreCase);
+
+            if (inContainer)
+            {
+                // A. host.docker.internal çözülebiliyor mu?
+                try
+                {
+                    var entry = System.Net.Dns.GetHostEntry("host.docker.internal");
+                    if (entry.AddressList.Length > 0)
+                    {
+                        return _cachedResolvedLoopback = "host.docker.internal";
+                    }
+                }
+                catch { }
+
+                // B. Docker bridge varsayılan host gateway (172.17.0.1 vb.)
+                try
+                {
+                    var gateway = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+                        .Where(n => n.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up)
+                        .SelectMany(n => n.GetIPProperties().GatewayAddresses)
+                        .Select(g => g.Address)
+                        .FirstOrDefault(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
+
+                    if (gateway != null)
+                    {
+                        return _cachedResolvedLoopback = gateway.ToString();
+                    }
+                }
+                catch { }
+            }
+
+            return _cachedResolvedLoopback = "localhost";
+        }
+    }
+
+    private static string ResolveHealthCheckUrl(string url)
+    {
+        try
+        {
+            var uri = new Uri(url);
+            if (IsLoopbackHost(uri.Host))
+            {
+                string resolvedHost = ResolveContainerLoopback();
+                if (resolvedHost != uri.Host)
+                {
+                    var builder = new UriBuilder(uri) { Host = resolvedHost };
+                    return builder.Uri.ToString();
+                }
+            }
+        }
+        catch { }
+        return url;
+    }
+
+    private static string ResolveHealthCheckHost(string host)
+    {
+        if (IsLoopbackHost(host))
+        {
+            return ResolveContainerLoopback();
+        }
+        return host;
+    }
+
     private async Task<(Service Service, UptimeCheck? Check, SslInfoHolder? Ssl)> CheckSingleServiceAsync(Service s, CancellationToken ct)
     {
         string? targetUrl = !string.IsNullOrWhiteSpace(s.HealthCheckUrl) ? s.HealthCheckUrl : s.Url;
@@ -242,6 +340,8 @@ public class UptimeCheckerService : BackgroundService
                 }
             }
 
+            string checkHost = ResolveHealthCheckHost(host);
+
             async Task<Exception?> TryConnectTcpAsync()
             {
                 try
@@ -249,7 +349,7 @@ public class UptimeCheckerService : BackgroundService
                     using var tcp = new TcpClient();
                     using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                     cts.CancelAfter(TimeSpan.FromSeconds(8));
-                    await tcp.ConnectAsync(host, port, cts.Token);
+                    await tcp.ConnectAsync(checkHost, port, cts.Token);
                     return null;
                 }
                 catch (Exception ex)
@@ -285,11 +385,19 @@ public class UptimeCheckerService : BackgroundService
         else
         {
             targetUrl = NormalizeHttpUrl(targetUrl!);
+            string internalCheckUrl = ResolveHealthCheckUrl(targetUrl);
             sslHolder = new SslInfoHolder();
 
             async Task<(bool Ok, string? Error)> TrySendHttpAsync()
             {
-                using var request = new HttpRequestMessage(HttpMethod.Get, targetUrl);
+                using var request = new HttpRequestMessage(HttpMethod.Get, internalCheckUrl);
+                try
+                {
+                    // Reverse proxy veya Virtual Host etiketleri için orijinal Host başlığını koru
+                    request.Headers.Host = new Uri(targetUrl).Authority;
+                }
+                catch { }
+
                 request.Options.Set(SslInfoKey, sslHolder);
                 try
                 {

@@ -25,8 +25,13 @@ public class CorvusAuthFilter : IEndpointFilter
             return await next(context);
         }
 
-        // 2. Cookie tabanlı oturum doğrulaması
+        // 2. Cookie veya query param tabanlı oturum doğrulaması
         string? token = httpContext.Request.Cookies["corvus_session"];
+        if (string.IsNullOrEmpty(token) && httpContext.Request.Query.TryGetValue("token", out var qToken))
+        {
+            token = qToken.ToString();
+        }
+
         var (isValid, _) = _auth.ValidateSessionToken(token);
         if (isValid)
         {
