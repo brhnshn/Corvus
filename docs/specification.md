@@ -33,16 +33,18 @@ Corvus is an open-source, ultra-low resource consumption service launcher and un
 - .NET Version: **.NET 9**
 - Web Framework: **ASP.NET Core Minimal API**
 - Compilation Mode: **Native AOT** (Zero Reflection)
-- Docker Communication: **Custom SocketsHttpHandler + System.Text.Json Source Generation** (direct communication with the Docker daemon over Unix domain sockets or Windows named pipes)
-- Memory Footprint Target: <30 MB RAM (runtime measurements: ~14–18 MB)
+- Docker Communication: **Custom SocketsHttpHandler + System.Text.Json Source Generation** (direct communication with the Docker daemon over Unix domain sockets or Windows named pipes, `GET /api/containers/stats-summary` batch streaming)
+- Memory Architecture: **Zero-Dependency In-Memory Micro-Cache** (<150 KB heap; 2.5s TTL for Docker socket, 5s TTL for Uptime 24h aggregations), **.NET 9 Elastic Memory Tuning** (`System.GC.ConserveMemory=5`, `ServerGarbageCollection=false`), releasing idle memory pages eagerly to the host OS upon traffic completion
+- Memory Footprint Target: <45 MB RAM (idle runtime measurements: ~30–38 MB, ceiling tightly capped during navigation)
 
 ### Frontend
 - **TypeScript + React 19 + Vite**
-- Styling: **Tailwind CSS v4**
+- Architecture: **Modular Clean Architecture**: strict type contracts in `types/`, domain-driven client modules in `api/` (`http.ts`, `services.ts`, `containers.ts`, etc.) with in-memory SWR caching
+- Styling: **Tailwind CSS v4** (Mobile-first 2-column KPI strip, full-width Disk bar, flexible cards)
 - Charting: **Recharts**
 - Internationalization (i18n): **Native React 19 Context** with compile-time type safety (`DeepStringify`), zero external library overhead (~1.2 KB), primary English (`en`) and complete Turkish (`tr`) support, dynamic switcher
 - Code-Splitting: **React.lazy + Suspense** and Vite `manualChunks` with an initial bundle payload under 200 KB
-- Real-Time Communication: REST + **Server-Sent Events (SSE)** for live status broadcasts
+- Real-Time Communication: REST + **Server-Sent Events (SSE)** for live status broadcasts (`corvus_event` pub/sub channels)
 
 ### Persistence Layer
 - **SQLite (Microsoft.Data.Sqlite) + Dapper (Dapper.AOT)**: WAL mode with `PRAGMA busy_timeout = 5000;`, `PRAGMA synchronous = NORMAL;`, `PRAGMA temp_store = MEMORY;`, `PRAGMA cache_size = -64000;` and periodic `PRAGMA optimize;`
@@ -153,6 +155,7 @@ Incoming push monitor heartbeat records.
 | `DELETE /api/services/{id}` | Delete a manual service or reset a Docker container override |
 | `GET /api/status-page` | **Unauthenticated:** Public status page summary |
 | `GET /api/containers` | List Docker containers with status, ports, and labels |
+| `GET /api/containers/stats-summary` | **Batch Stats:** Stream CPU, RAM, and Network metrics for all running containers in a single request (eliminates N+1 socket calls) |
 | `GET /api/containers/{id}/stats` | Live per-container CPU%, RAM usage, and Network I/O metrics |
 | `GET /api/containers/{id}/logs` | Snapshot of the last 100 log lines |
 | `GET /api/containers/{id}/logs/stream` | **SSE:** Live real-time container log stream |
@@ -169,6 +172,7 @@ Incoming push monitor heartbeat records.
 | `GET /api/metrics/system` | System resource time-series (`?range=1h\|24h\|7d`) |
 | `GET /api/uptime` | Service uptime history (`?service_id=...&range=7d`) |
 | `POST /api/notifications/test` | Test dispatch alerts (Discord, Telegram, Ntfy, Webhook) |
+| `GET /api/version` | Queries GitHub Releases API for current Corvus version and update availability |
 | `GET /api/stream/events` | **SSE:** Real-time stream of service state changes and events |
 | `GET /api/auth/status` | Current session state and Zero-Trust SSO header detection |
 | `POST /api/auth/login` | Authenticate user and issue session cookie |
@@ -182,8 +186,9 @@ Incoming push monitor heartbeat records.
 |---|---|---|
 | `ContainerDiscoveryService` | 10 sec | Synchronizes container state from the Docker socket |
 | `SystemMetricsCollector` | 15 sec | Samples host CPU, RAM, disk, and network stats into `system_metrics` |
-| `UptimeCheckerService` | 60 sec | Verifies HTTP status, TCP port reachability, and SSL expiration days; evaluates Dead Man's Snitch timeouts; triggers multi-channel alerts upon status change and publishes SSE events |
-| `RetentionCleanupService` | Once daily | Dynamically reads `retention_days` from application settings; prunes aged time-series records from `system_metrics` and `uptime_checks` when > 0, skips deletion when 0 (Unlimited mode), and executes `PRAGMA optimize;` |
+| `UptimeCheckerService` | 60 sec | HTTP/TCP and SSL checks with a 3-state finite state machine (`healthy` -> `degraded` -> `down`); requires 3 consecutive failures to suppress false positives; auto-resolves loopback targets to Docker bridge gateway |
+| `UpdateCheckerService` | 24 hours | Checks GitHub Releases API for updates and caches release notifications |
+| `RetentionCleanupService` | Once daily | Dynamically reads `retention_days` from application settings; prunes aged time-series records from `system_metrics` and `uptime_checks` when > 0, skips deletion when 0 (Unlimited mode), and performs optimized memory compaction (`GC.Collect`) |
 
 ---
 
@@ -203,11 +208,11 @@ Incoming push monitor heartbeat records.
 
 | Page | URL | Features |
 |---|---|---|
-| **Dashboard** | `/` | Operational service KPIs, container summaries, live resource graphs, and live-updating backup status |
+| **Dashboard** | `/` | Mobile-first 2-column KPI strip, full-width Disk bar, live system pulse hero, GitHub update checker badge, and active containers widget |
 | **Services** | `/` | Service launchpad, status badges, TCP indicators, SSL expiration badge, and reordering controls |
-| **Containers** | `/` | Live CPU%, RAM, and Net I/O badges, Start/Stop/Pause/Restart actions, Compose stack accordion grouping, live log terminal |
+| **Containers** | `/` | Batch stats streaming, live CPU%, RAM, and Net I/O badges, Start/Stop/Pause/Restart actions, Compose stack accordion grouping, live log terminal |
 | **System Metrics**| `/` | Telemetry graphs across 1h, 6h, 12h, 24h, 7d periods for CPU, RAM, Disk, and Network |
-| **Uptime & Snitch** | `/` | Response latency charts and Dead Man's Snitch cron/backup monitor tab |
+| **Uptime & Snitch** | `/` | 3-state health monitoring, response latency charts, and Dead Man's Snitch cron/backup monitor tab |
 | **Settings** | `/` | Tabbed alert channel configuration (Discord, Telegram, Ntfy, Webhook), test notifications, dual-mode backup management (internal snapshot download via `VACUUM INTO` + external push integration), flexible data retention (7-365 days, Unlimited mode, risk warning), and real-time database disk usage telemetry |
 | **Public Status** | `/status` | **Unauthenticated:** Operational status banner, service uptime metrics, and SSL certificates |
 
@@ -233,4 +238,9 @@ Incoming push monitor heartbeat records.
 - [x] Full compile-time typed bilingual i18n system (English default, Turkish complete)
 - [x] Dual-mode backup management: One-click lock-free SQLite snapshot download (`GET /api/backup/download`) with SSE live Dashboard updates + external push integration
 - [x] Flexible data retention & disk telemetry: Presets, Unlimited mode with disk advisory, live DB size indicator, and dynamic `RetentionCleanupService`
-- [x] 64/64 passing xUnit test coverage
+- [x] In-Memory Micro-Cache (<150 KB) & .NET 9 `System.GC.ConserveMemory=5` elastic memory management (30–45 MB RAM)
+- [x] Batch Stats Endpoint (`GET /api/containers/stats-summary`) eliminating N+1 socket calls
+- [x] Uptime Kuma-grade 3-state resilience engine (`healthy` -> `degraded` -> `down`) & Docker loopback bridge gateway resolution
+- [x] Mobile-first 2-column compact KPI strip & active containers widget
+- [x] GitHub Releases API dynamic SemVer version update checker (`GET /api/version`)
+- [x] 85/85 passing xUnit test coverage

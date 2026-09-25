@@ -33,16 +33,18 @@ Corvus, self-hosted sunucular için açık kaynak, düşük kaynak tüketimli, t
 - .NET sürümü: **.NET 9**
 - Web framework: **ASP.NET Core Minimal API**
 - Derleme modu: **Native AOT** (Zero Reflection)
-- Docker erişimi: **Custom SocketsHttpHandler + System.Text.Json Source Generator** (Docker daemon REST API'sine Unix Socket ve Windows Named Pipe üzerinden doğrudan erişim)
-- Hedef RAM: <30 MB (Canlı ölçümlerde ~14-18 MB)
+- Docker erişimi: **Custom SocketsHttpHandler + System.Text.Json Source Generator** (Docker daemon REST API'sine Unix Socket ve Windows Named Pipe üzerinden doğrudan erişim, `GET /api/containers/stats-summary` toplu okuma akışı)
+- Bellek Mimarisi: **Sıfır Bağımlılıklı In-Memory Micro-Cache** (<150 KB heap; Docker soketi için 2.5s, Uptime 24s agregasyonları için 5s TTL), **.NET 9 Elastic Memory Tuning** (`System.GC.ConserveMemory=5`, `ServerGarbageCollection=false`), trafik bitiminde boşta kalan sayfaların çekirdeğe anında iadesi
+- Hedef RAM: <45 MB (Boşta ~30-38 MB, hızlı gezintide dahi mikro-önbellek sayesinde tavan sınırlı)
 
 ### Frontend
 - **TypeScript + React 19 + Vite**
-- Stil: **Tailwind CSS v4**
+- Mimari: **Modüler Temiz Mimari (Clean Architecture)**: `types/` altında güçlü tip sözleşmeleri, `api/` altında bağımsız etki alanı servisleri (`http.ts`, `services.ts`, `containers.ts` vb.) ve yerleşik SWR in-memory önbellekleme
+- Stil: **Tailwind CSS v4** (Mobil-öncelikli 2 sütunlu KPI şeritleri, tam genişlikte depolama göstergesi ve esnek kartlar)
 - Grafikler: **Recharts**
 - Çoklu Dil (i18n): **Derleme anında tip güvenli yerli React 19 Context** (`DeepStringify`), sıfır dış kütüphane ek yükü (~1.2 KB), varsayılan İngilizce (`en`) ve tam kapsamlı Türkçe (`tr`) desteği, dinamik dil seçici
 - Kod Ayrıştırma (Code-Splitting): **React.lazy + Suspense** ve Vite `manualChunks` ile <200 KB ilk yükleme
-- İletişim: REST + **Server-Sent Events (SSE)** üzerinden anlık durum yayını
+- İletişim: REST + **Server-Sent Events (SSE)** üzerinden anlık durum yayını (`corvus_event` pub/sub kanalları)
 
 ### Veri katmanı
 - **SQLite (Microsoft.Data.Sqlite) + Dapper (Dapper.AOT)**: WAL modu, `PRAGMA busy_timeout = 5000;`, `PRAGMA synchronous = NORMAL;`, `PRAGMA temp_store = MEMORY;`, `PRAGMA cache_size = -64000;` ve periyodik `PRAGMA optimize;`
@@ -153,6 +155,7 @@ Push monitor üzerinden gelen son yedekleme sinyalleri.
 | `DELETE /api/services/{id}` | Manuel servisi siler veya Docker override'ını kaldırır |
 | `GET /api/status-page` | **Şifresiz:** Halka açık durum sayfası için servis özetlerini döner |
 | `GET /api/containers` | Docker container listesi (durum, portlar, etiketler) |
+| `GET /api/containers/stats-summary` | **Toplu Stats:** Tüm çalışan konteynerlerin CPU, RAM ve Ağ metriklerini tek HTTP akışında toplar (N+1 socket önleyici) |
 | `GET /api/containers/{id}/stats` | Anlık konteyner CPU%, bellek kullanımı ve ağ I/O istatistikleri |
 | `GET /api/containers/{id}/logs` | Son 100 konteyner log satırını döner |
 | `GET /api/containers/{id}/logs/stream` | **SSE:** Gerçek zamanlı canlı konteyner log akışı |
@@ -169,6 +172,7 @@ Push monitor üzerinden gelen son yedekleme sinyalleri.
 | `GET /api/metrics/system` | Sistem kaynakları zaman serisi (`?range=1h\|24h\|7d`) |
 | `GET /api/uptime` | Servis uptime geçmişi (`?service_id=...&range=7d`) |
 | `POST /api/notifications/test` | Alarm kanallarını (Discord, Telegram, Ntfy, Webhook) test eder |
+| `GET /api/version` | GitHub Releases API üzerinden güncel Corvus sürümünü ve güncelleme durumunu sorgular |
 | `GET /api/stream/events` | **SSE:** Servis durumu ve sistem olaylarının anlık yayını |
 | `GET /api/auth/status` | Oturum durumu ve Zero-Trust SSO başlık denetimi |
 | `POST /api/auth/login` | Giriş yapar ve oturum çerezi üretir |
@@ -182,8 +186,9 @@ Push monitor üzerinden gelen son yedekleme sinyalleri.
 |---|---|---|
 | `ContainerDiscoveryService` | 10 sn | Docker socket'ten container listesini senkronize eder |
 | `SystemMetricsCollector` | 15 sn | Host CPU/RAM/disk/network ölçer, `system_metrics` tablosuna yazar |
-| `UptimeCheckerService` | 60 sn | HTTP yanıtlarını, TCP soket bağlantılarını ve SSL sertifika geçerlilik günlerini denetler; Dead Man's Snitch periyot aşımında DOWN uyarısı üretir; durum değişiminde Discord/Telegram/Ntfy alarmlarını tetikler ve SSE ile yayınlar |
-| `RetentionCleanupService` | Günde 1 kez | `retention_days` ayarını dinamik okur; > 0 ise `system_metrics` ve `uptime_checks` eski kayıtlarını temizler, 0 (Sınırsız) ise silmeyi atlar ve `PRAGMA optimize;` çalıştırır |
+| `UptimeCheckerService` | 60 sn | HTTP/TCP ve SSL kontrolleri. 3 durumlu sonlu durum makinesi (`healthy` -> `degraded` -> `down`), 3 ardışık hata eşiği ile yanlış alarmları engeller, loopback hedeflerini bridge ağ geçidine yönlendirir |
+| `UpdateCheckerService` | 24 saat | GitHub Releases API'sini sorgulayarak yeni sürüm kontrolü yapar, güncelleme bildirimlerini önbelleğe alır |
+| `RetentionCleanupService` | Günde 1 kez | `retention_days` ayarını dinamik okur; > 0 ise `system_metrics` ve `uptime_checks` eski kayıtlarını temizler, 0 (Sınırsız) ise silmeyi atlar ve bellek sıkıştırması (`GC.Collect`) uygular |
 
 ---
 
@@ -203,11 +208,11 @@ Push monitor üzerinden gelen son yedekleme sinyalleri.
 
 | Sayfa | URL | Özellikler |
 |---|---|---|
-| **Dashboard** | `/` | Sağlıklı/arızalı servis sayıları, container durumu, canlı metrik grafikleri ve anlık güncellenen son yedekleme |
+| **Dashboard** | `/` | Mobil-öncelikli 2 sütunlu KPI şeridi, tam genişlikte Disk barı, canlı sistem nabzı, GitHub sürüm rozeti ve aktif konteynerler widget'ı |
 | **Servisler** | `/` | Servis kartları, durum rozetleri, TCP port göstergeleri, SSL kalan gün rozeti, yukarı/aşağı sıralama butonları |
-| **Container'lar** | `/` | Canlı CPU%, RAM ve Net I/O rozetleri, Start/Stop/Pause/Restart aksiyonları, Compose Stack akordeon gruplaması, canlı log terminali |
+| **Container'lar** | `/` | Toplu stats akışı, anlık CPU%, RAM ve Net I/O rozetleri, Start/Stop/Pause/Restart aksiyonları, Compose Stack akordeon gruplaması, canlı log terminali |
 | **Sistem Metrikleri**| `/` | 1h, 6h, 12h, 24h, 7d aralıklarında CPU, RAM, Disk ve Ağ I/O grafikleri |
-| **Uptime & Snitch** | `/` | HTTP/TCP yanıt süreleri geçmişi ve Dead Man's Snitch periyodik cron/yedekleme izleme sekmesi |
+| **Uptime & Snitch** | `/` | 3 durumlu sağlık takibi, HTTP/TCP yanıt süreleri geçmişi ve Dead Man's Snitch periyodik cron/yedekleme izleme sekmesi |
 | **Ayarlar** | `/` | Sekmeli alarm yapılandırması (Discord, Telegram, Ntfy, Webhook), test bildirimleri, çift yönlü yedekleme (dahili `VACUUM INTO` indirme + harici curl entegrasyonu), esnek veri saklama (7-365 gün, Sınırsız mod, risk uyarısı) ve anlık veritabanı boyutu |
 | **Canlı Durum** | `/status` | **Şifresiz:** Tüm sistemler operasyonel banner'ı, servis uptime oranları, SSL günleri |
 
@@ -233,4 +238,9 @@ Push monitor üzerinden gelen son yedekleme sinyalleri.
 - [x] Derleme anında tip korumalı çift dilli i18n sistemi (İngilizce varsayılan, Türkçe tam destek)
 - [x] Çift yönlü yedekleme yönetimi: Tek tıkla kilitlenmesiz SQLite anlık yedek indirme (`GET /api/backup/download`), SSE canlı Dashboard güncellemesi ve harici push entegrasyonu
 - [x] Esnek veri saklama süresi ve disk telemetrisi: Hazır periyotlar, Sınırsız mod, risk uyarısı, canlı DB boyutu ve dinamik `RetentionCleanupService`
-- [x] 64/64 xUnit birim ve entegrasyon testi doğrulaması
+- [x] In-Memory Micro-Cache (<150 KB) & .NET 9 `System.GC.ConserveMemory=5` elastik bellek yönetimi (30–45 MB RAM)
+- [x] Toplu İstatistikler (Batch Stats) Uç Noktası (`GET /api/containers/stats-summary`) ile N+1 soket çağrılarının kaldırılması
+- [x] Uptime Kuma seviyesinde 3 durumlu dayanıklılık motoru (`healthy` -> `degraded` -> `down`) & Docker loopback ağ geçidi çözümlemesi
+- [x] Mobil-öncelikli 2 sütunlu kompakt KPI şeridi & aktif konteynerler widget'ı
+- [x] GitHub Releases API dinamik SemVer sürüm denetleyicisi (`GET /api/version`)
+- [x] 85/85 xUnit birim ve entegrasyon testi doğrulaması

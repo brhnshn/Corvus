@@ -26,31 +26,31 @@ corvus/
 ├── src/
 │   ├── Corvus.Api/                # Backend — ASP.NET Core Minimal API, .NET 9 Native AOT
 │   │   ├── Program.cs             # Uygulama girişi, DI ve Minimal API orkestrasyonu (113 satır)
-│   │   ├── Corvus.Api.csproj
+│   │   ├── Corvus.Api.csproj      # Native AOT, Dapper.AOT, System.GC.ConserveMemory=5
 │   │   ├── Endpoints/             # Kaynak odaklı Minimal API uç noktaları (extension metodlar)
 │   │   │   ├── AuthEndpoints.cs          # Session auth, kayıt yönetimi ve Zero-Trust SSO
 │   │   │   ├── BackupEndpoints.cs        # Tek tıkla SQLite VACUUM INTO anlık yedek indirme
-│   │   │   ├── ContainersEndpoints.cs    # Containers, /stats, /logs, /logs/stream ve yaşam döngüsü kontrolleri
-│   │   │   ├── DashboardEndpoints.cs     # Dashboard KPI özeti
+│   │   │   ├── ContainersEndpoints.cs    # Containers, /stats, /stats-summary (toplu stats), /logs/stream ve kontroller
+│   │   │   ├── DashboardEndpoints.cs     # 2.5s in-memory önbellekli Dashboard KPI özeti
 │   │   │   ├── MetricsEndpoints.cs       # Sistem donanım metrikleri zaman serisi
 │   │   │   ├── NotificationEndpoints.cs  # Çok kanallı alarm test uç noktası
 │   │   │   ├── PushEndpoints.cs          # Push webhooks ve Dead Man's Snitch (/push-monitors)
 │   │   │   ├── ServicesEndpoints.cs      # Servis CRUD ve /reorder
-│   │   │   ├── SettingsEndpoints.cs      # Dinamik ayarlar ve veritabanı disk boyutu telemetrisi
+│   │   │   ├── SettingsEndpoints.cs      # Dinamik ayarlar, sürüm kontrolü (/version) ve DB disk telemetrisi
 │   │   │   ├── StatusPageEndpoints.cs    # Şifresiz halka açık durum özeti (/api/status-page)
 │   │   │   ├── StreamEndpoints.cs        # Canlı SSE olay akışı (/api/stream/events)
 │   │   │   └── UptimeEndpoints.cs        # Servis uptime denetim geçmişi
 │   │   ├── BackgroundServices/    # Arka plan çalışan iş parçacıkları
 │   │   │   ├── ContainerDiscoveryService.cs  # Docker socket periyodik konteyner senkronizasyonu (10s)
 │   │   │   ├── SystemMetricsCollector.cs     # Host CPU/RAM/Disk/Net metrik toplayıcısı (15s)
-│   │   │   ├── UptimeCheckerService.cs       # HTTP/TCP ping, SSL sertifika ve Snitch denetimi (60s)
-│   │   │   └── RetentionCleanupService.cs    # Dinamik veri saklama temizleyicisi & PRAGMA optimize (24h)
+│   │   │   ├── UptimeCheckerService.cs       # Uptime Kuma 3 durumlu HTTP/TCP ping, SSL ve Snitch denetimi (60s)
+│   │   │   └── RetentionCleanupService.cs    # Dinamik veri saklama temizleyicisi, PRAGMA optimize & GC compact (24h)
 │   │   ├── Data/                  # Veri erişim katmanı (Dapper.AOT + SQLite)
 │   │   │   ├── DbConnectionFactory.cs        # SQLite WAL, busy_timeout=5000 ve PRAGMA optimizasyonları
 │   │   │   ├── DatabaseMigrator.cs           # DbUp sıralı göç yöneticisi
 │   │   │   ├── ServicesRepository.cs         # Servis ve override sorguları
 │   │   │   ├── PushMonitorRepository.cs      # Dead Man's Snitch veri erişimi
-│   │   │   ├── UptimeRepository.cs           # Uptime geçmişi
+│   │   │   ├── UptimeRepository.cs           # Uptime geçmişi ve 5s önbellekli 24h yüzde agregasyonu
 │   │   │   ├── MetricsRepository.cs          # Host metrikleri
 │   │   │   ├── BackupRepository.cs           # Push backup logları
 │   │   │   ├── UserRepository.cs             # Kullanıcı hesapları ve parola hashleme
@@ -70,24 +70,35 @@ corvus/
 │   │   │   ├── UptimeCheck.cs                # Uptime denetim kayıt modeli
 │   │   │   ├── BackupEvent.cs                # Backup push bildirim modeli
 │   │   │   ├── User.cs                       # Kullanıcı modeli
-│   │   │   ├── VersionInfo.cs                # Güncelleme denetleyici DTO'su
+│   │   │   ├── VersionInfo.cs                # Dinamik GitHub SemVer sürüm DTO'su
 │   │   │   └── CorvusJsonSerializerContext.cs # .NET 9 Native AOT JsonSourceGeneration context
 │   │   └── Services/                # Çekirdek iş mantığı servisleri
 │   │       ├── DockerHttpClient.cs           # SocketsHttpHandler ile doğrudan Docker REST istemcisi
-│   │       ├── DockerService.cs              # Konteyner işlemleri, istatistikler ve etiket eşleme
+│   │       ├── DockerService.cs              # 2.5s önbellekli konteyner işlemleri, toplu stats özeti ve etiket eşleme
 │   │       ├── DockerLogDemuxer.cs           # Multiplexed Docker stdout/stderr sıfır bellek tahsisli ayrıştırıcı
-│   │       ├── NotificationService.cs        # Çift dilli Discord, Telegram, Ntfy ve Webhook alarm motoru
-│   │       ├── EventBroadcaster.cs           # Bounded Channel SSE olay yayıncısı
+│   │       ├── NotificationService.cs        # SSRF korumalı, çift dilli Discord, Telegram, Ntfy ve Webhook motoru
+│   │       ├── EventBroadcaster.cs           # Çok istemcili Channel Pub/Sub SSE olay yayıncısı
 │   │       ├── AuthService.cs                # Zero-Trust SSO proxy headers & SHA-256 session auth
-│   │       └── UpdateCheckerService.cs       # GitHub Releases sürüm kontrol servisi
+│   │       ├── CorvusAuthFilter.cs           # Minimal API EndpointFilter kimlik doğrulama katmanı
+│   │       └── UpdateCheckerService.cs       # GitHub Releases API sürüm kontrol servisi
 │   │
 │   └── Corvus.Web/                 # Frontend — TypeScript + React 19 + Vite + Tailwind CSS v4
 │       ├── vite.config.ts          # manualChunks ile optimize edilmiş Vite yapılandırması
 │       ├── src/
 │       │   ├── main.tsx
 │       │   ├── App.tsx             # React.lazy rota kod ayrıştırma (code-splitting) & SSE bağlantısı
-│       │   ├── api/
-│       │   │   └── client.ts       # Tip güvenli API istemcisi (tüm fetch çağrıları merkezileştirildi)
+│       │   ├── types/              # Modüler tip sözleşmeleri (Clean Architecture)
+│       │   │   └── index.ts        # Tüm API ve DTO arayüz tipleri
+│       │   ├── api/                # Modülerleştirilmiş API istemci katmanı
+│       │   │   ├── http.ts         # fetchJson, in-memory SWR önbellek (fetchCachedJson), invalidateCache
+│       │   │   ├── auth.ts         # Kimlik doğrulama uç noktaları
+│       │   │   ├── services.ts     # Servis CRUD ve sıralama
+│       │   │   ├── containers.ts   # Konteyner işlemleri, toplu stats (/stats-summary) ve loglar
+│       │   │   ├── uptime.ts       # Uptime kontrolleri ve push monitörleri
+│       │   │   ├── metrics.ts      # Donanım metrikleri
+│       │   │   ├── settings.ts     # Ayarlar ve yedekleme
+│       │   │   ├── index.ts        # Birleşik API nesnesi
+│       │   │   └── client.ts       # Geriye dönük uyumluluk re-export katmanı
 │       │   ├── i18n/               # Derleme anında tip güvenli çoklu dil sistemi
 │       │   │   ├── en.ts           # Birincil İngilizce sözlük
 │       │   │   ├── tr.ts           # Türkçe çeviri sözlüğü
@@ -95,7 +106,8 @@ corvus/
 │       │   │   └── index.tsx       # I18nProvider ve useI18n hook'u
 │       │   ├── utils/              # Modüler yardımcı fonksiyonlar
 │       │   │   ├── url.ts          # Servis URL formatlama ve güvenli dönüştürme
-│       │   │   └── format.ts       # Bayt dönüştürme (B, KB, MB, GB, TB) yardımcı modülü
+│       │   │   ├── format.ts       # Bayt dönüştürme (B, KB, MB, GB, TB) yardımcı modülü
+│       │   │   └── grouping.ts     # Docker Compose akıllı gruplama mantığı
 │       │   ├── components/         # SADECE ortak/paylaşılan global UI bileşenleri
 │       │   │   ├── Sidebar.tsx               # Masaüstü ray menü & mobil slide-over çekmece
 │       │   │   ├── StatusBadge.tsx           # Sağlık durumu rozeti (healthy, degraded, down)
@@ -105,14 +117,18 @@ corvus/
 │       │       ├── AuthPage/
 │       │       │   └── index.tsx             # Giriş ve kayıt ekranı
 │       │       ├── Containers/
-│       │       │   ├── index.tsx             # Sayfa orkestratörü ve durum yöneticisi (<200 satır)
+│       │       │   ├── index.tsx             # Toplu stats ile çalışan sayfa yöneticisi (<250 satır)
 │       │       │   ├── ContainerList.tsx     # Duyarlı mobil kartlar ve masaüstü tablo görünümü
 │       │       │   ├── ComposeStackGroup.tsx # Docker Compose stack projeleri için akordiyon bileşeni
 │       │       │   ├── ContainerStatsBadges.tsx # CPU, RAM ve Ağ canlı rozetleri
 │       │       │   ├── ContainerActionButtons.tsx # Yaşam döngüsü butonları ve yükleniyor durumları
 │       │       │   └── ContainerLogsModal.tsx   # Canlı konteyner log terminali modalı
 │       │       ├── Dashboard/
-│       │       │   └── index.tsx             # Konsolide KPI özeti ve çalışan servisler
+│       │       │   ├── index.tsx             # Konsolide KPI özeti ve çalışan servisler
+│       │       │   ├── SystemPulseHero.tsx   # Canlı durum nabzı, ağ I/O ve güncelleme kontrol kartı
+│       │       │   ├── SystemKpiStrip.tsx    # 2 sütunlu kompakt KPI şeridi ve tam genişlikte Disk çubuğu
+│       │       │   ├── AttentionRequiredCard.tsx # Kritik arızalar ve SSL uyarıları kartı
+│       │       │   └── ActiveContainersWidget.tsx # 2 sütunlu duyarlı aktif konteynerler kartı
 │       │       ├── PublicStatus/
 │       │       │   └── index.tsx             # Şifresiz halka açık durum sayfası (/status)
 │       │       ├── Services/
@@ -138,12 +154,13 @@ corvus/
 │       └── wwwroot/                # Üretime hazır derlenmiş arayüz paketi (Corvus.Api tarafından sunulur)
 │
 ├── tests/
-│   └── Corvus.Api.Tests/           # xUnit Test Paketi (64 Başarılı Test)
+│   └── Corvus.Api.Tests/           # xUnit Test Paketi (85 Başarılı Test)
 │       ├── AuthServiceTests.cs
-│       ├── DockerServiceTests.cs
+│       ├── DockerServiceTests.cs     # Konteyner işlemleri, micro-cache ve batch stats testleri
 │       ├── DockerLogDemuxerTests.cs
 │       ├── NotificationServiceTests.cs
 │       ├── RoadmapFeaturesTests.cs
+│       ├── UpdateCheckerTests.cs
 │       └── DatabaseMigrationAndRepositoryTests.cs
 │
 └── docs/                           # Teknik şartnameler ve mimari kılavuzlar
@@ -201,3 +218,29 @@ sequenceDiagram
     API->>SQLite: Denetim Olayını Kaydet
     API-->>Browser: İyimser Güncelleme + JSON Yanıtı
 ```
+
+---
+
+## 🧠 Bellek Dayanıklılığı ve In-Memory Micro-Cache
+
+Corvus, harici bir önbellek sunucusu (Redis vb.) çalıştırmadan sistem belleğini **30–45 MB** bandında tutmak için çok katmanlı bir optimizasyon mimarisi uygular:
+
+1. **Sıfır Dış Bağımlılıklı Micro-Cache:**
+   - Docker soket okumaları (`GetContainersAsync`) ve Dashboard özetleri (`GET /api/dashboard/summary`) 2.5 saniyelik mikro önbelleğe alınır.
+   - Uptime 24 saatlik yüzde agregasyonları (`Get24hUptimePercentagesAsync`) 5 saniye önbellekte tutulur.
+   - Hızlı sayfa geçişlerinde Docker soketi ve SQLite üzerinde oluşan nesne tahsisatları (allocations) %90 oranında engellenir.
+2. **Toplu İstatistikler (Batch Stats Endpoint):**
+   - Konteyner başına N+1 paralel `/stats` isteği yerine `GET /api/containers/stats-summary` ile çalışan tüm konteynerlerin metrikleri tek bir HTTP akışında toplanır.
+3. **.NET 9 Bellek Tasarruf Yapılandırması (`System.GC.ConserveMemory=5`):**
+   - İstek dalgalanmaları bittiğinde boşta kalan sanal sayfaların Linux çekirdeğine (`madvise`) hızlıca iade edilmesi sağlanır.
+   - `RetentionCleanupService` eski kayıtları sildikten sonra `GC.Collect(1, GCCollectionMode.Optimized)` ile bellek sıkıştırması yapar.
+
+---
+
+## 🛡️ Uptime Kuma Seviyesinde 3 Durumlu Sağlık Motoru
+
+Servis sağlığı kontrollerinde geçici ağ dalgalanmalarının yanlış alarm (false-positive) üretmesini önlemek için 3 durumlu sonlu durum makinesi (finite state machine) kullanılır:
+- **`healthy`:** Servis yanıt veriyor ve HTTP 2xx/3xx veya açık TCP portu doğrulandı.
+- **`degraded`:** İlk başarısızlık tespit edildi; sistem alarm üretmez, servisi sarı uyarı moduna alır.
+- **`down`:** 3 ardışık başarısızlık sonrasında servis kırmızıya döner ve yapılandırılmış bildirim kanallarına (Discord, Telegram, vb.) alarm fırlatılır.
+- **Loopback Ağ Çözümlemesi:** Docker içinde çalışan Corvus'un host üzerindeki servislere (`localhost`, `127.0.0.1`) erişebilmesi için varsayılan bridge ağ geçidi (`host.docker.internal`) otomatik çözümlenir.

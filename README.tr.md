@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/RAM_T%C3%BCketimi-%3C30_MB-success" alt="RAM <30MB" />
   <img src="https://img.shields.io/badge/Frontend-React_19_+_Vite_+_Tailwind-61DAFB?logo=react" alt="React" />
   <img src="https://img.shields.io/badge/Veritaban%C4%B1-SQLite_+_Dapper.AOT-003B57?logo=sqlite" alt="SQLite" />
-  <img src="https://img.shields.io/badge/Testler-64_Ba%C5%9Far%C4%B1l%C4%B1-brightgreen" alt="Tests" />
+  <img src="https://img.shields.io/badge/Testler-85_Ba%C5%9Far%C4%B1l%C4%B1-brightgreen" alt="Tests" />
   <img src="https://img.shields.io/badge/i18n-%C4%B0ngilizce_%7C_T%C3%BCrk%C3%A7e-blue" alt="i18n" />
   <img src="https://img.shields.io/badge/Lisans-MIT-blue" alt="License" />
 </p>
@@ -27,7 +27,7 @@
 
 ## 🌟 Genel Bakış
 
-**Corvus**, homelab ortamları, VPS sunucuları ve self-hosted altyapılar için tasarlanmış ultra hafif, yerel bir servis başlatıcı ve gözlemlenebilirlik (observability) kontrol panelidir. Sıfır çalışma zamanı yansıması (zero-reflection) ile önceden derlenen (**Native AOT**) Corvus, **30 MB'ın altında RAM** tüketerek çalışırken gerçek zamanlı Docker konteyner keşfi, servis sağlık denetimi, zaman serisi kaynak takibi, canlı konteyner logları, çok kanallı alarmlar ve periyodik push izleme sunar.
+**Corvus**, homelab ortamları, VPS sunucuları ve self-hosted altyapılar için tasarlanmış ultra hafif, yerel bir servis başlatıcı ve gözlemlenebilirlik (observability) kontrol panelidir. Sıfır çalışma zamanı yansıması (zero-reflection) ile önceden derlenen (**Native AOT**) Corvus, **30 MB'ın altında RAM** tüketerek çalışırken gerçek zamanlı Docker konteyner keşfi, Uptime Kuma seviyesinde 3 durumlu servis sağlık denetimi, zaman serisi kaynak takibi, canlı konteyner logları, çok kanallı alarmlar ve periyodik push izleme sunar.
 
 ---
 
@@ -41,6 +41,14 @@
   - **Otomatik Keşif:** Docker socket (`/var/run/docker.sock`) üzerinden doğrudan konteynerleri tespit eder ve etiketleri (`corvus.name`, `corvus.category`, `corvus.url` vb.) okur.
   - **Manuel Servisler:** Harici URL'leri, yerel servisleri veya IoT uç noktalarını el ile tanımlayabilme.
   - **Görsel Sıralama:** Servisleri yukarı/aşağı butonlarıyla kalıcı olarak sıralayabilme (`display_order`).
+- **🧠 Dahili In-Memory Micro-Cache & Elastik Bellek Mimarisi:**
+  - 2.5 saniyelik sıfır-tahsisli dahili önbellekleme: Sekmeler arası hızlı geçişlerde Docker soket ve SQLite sorgu yükünü %90 azaltarak bellek sıçramalarını önler (<150 KB bellek maliyeti).
+  - N+1 yerine tek sorguda tüm çalışan konteynerleri toplayan toplu metrik uç noktası (`GET /api/containers/stats-summary`).
+  - .NET 9 `System.GC.ConserveMemory=5` yapılandırması ve periyodik idle bellek sıkıştırmasıyla RAM'i boşta ~30-35 MB, aktif kullanımda 40-50 MB bandında tutar.
+- **🛡️ Uptime Kuma Seviyesinde 3 Durumlu Dayanıklılık Motoru:**
+  - `healthy` ➔ `degraded` ➔ `down` durum makinesi: Anlık ağ dalgalanmalarında panik false-alarmı üretmez; 3 ardışık başarısızlıktan sonra gerçek arıza alarmı üretir.
+  - `Parallel.ForEachAsync` ile onlarca servisi darboğazsız eşzamanlı denetler.
+  - Konteyner loopback ağını otomatik çözümler (`host.docker.internal` / varsayılan bridge gateway yönlendirmesi).
 - **💾 Çift Yönlü Yedekleme Yönetimi & Felaket Kurtarma:**
   - **Dahili Anlık Yedekleme İndirme:** Kilitlenmesiz, tutarlı SQLite `VACUUM INTO` veritabanı yedeğini tek tıkla indirme (`GET /api/backup/download`) ve Dashboard istatistiklerini SSE ile canlı güncelleme.
   - **Harici Yedekleme Bildirimi:** Dinamik token oluşturucu ve otomatik yapılandırılmış `curl` şablonları ile host yedekleme araçları (`restic`, `borg`, cron) entegrasyonu.
@@ -71,8 +79,11 @@
 - **🛡️ Zero-Trust SSO & Ters Vekil (Reverse Proxy) Kimlik Doğrulama:**
   - Güvenilen proxy başlıkları ile otomatik giriş desteği: `Tailscale-User-Login`, `Cf-Access-Authenticated-User-Email`, `Remote-User`, `X-Forwarded-User`.
   - Yerleşik kullanıcı adı/şifre doğrulaması ve kapatılabilir kayıt mekanizması.
-- **📱 Mobil ve Tablet Uyumlu Arayüz:**
+- **📱 Mobil ve Tablet Uyumlu Komuta Merkezi:**
+  - 2 kolonlu optimize KPI kartları, tam genişlikte Disk Durumu çubuğu ve yan yana 2 kolonlu konteyner paneli.
   - Slide-over drawer menüsü, sabit mobil üst başlık, duyarlı tablo ve kart görünümleri.
+- **🔄 Otomatik Semantik Sürüm & Güncelleme Kontrolü:**
+  - GitHub Releases API ile dinamik sürüm karşılaştırması (`GET /api/version`) ve yeni sürüm çıktığında doğrudan bildirim.
 - **⚡ Yüksek Performans & Optimizasyon:**
   - SQLite WAL modu, `PRAGMA busy_timeout = 5000;`, `PRAGMA synchronous = NORMAL;`, `PRAGMA temp_store = MEMORY;`.
   - Zaman serisi telemetri tablolarında kompozit performans indeksleri (`004_performance_indexes.sql`).

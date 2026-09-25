@@ -79,6 +79,7 @@ corvus/
 │   │       ├── NotificationService.cs        # Bilingual multi-channel alert dispatcher (Discord, Telegram, Ntfy, Webhook)
 │   │       ├── EventBroadcaster.cs           # Bounded Channel SSE real-time event publisher
 │   │       ├── AuthService.cs                # Zero-Trust SSO proxy headers & SHA-256 session auth
+│   │       ├── CorvusAuthFilter.cs           # Minimal API EndpointFilter authentication layer
 │   │       └── UpdateCheckerService.cs       # GitHub Releases version checking
 │   │
 │   └── Corvus.Web/                 # Frontend — TypeScript + React 19 + Vite + Tailwind CSS v4
@@ -86,8 +87,18 @@ corvus/
 │       ├── src/
 │       │   ├── main.tsx
 │       │   ├── App.tsx             # React.lazy route code-splitting & SSE streaming listener
-│       │   ├── api/
-│       │   │   └── client.ts       # Typed API client wrapper (all fetch calls centralized)
+│       │   ├── types/              # Modular type contracts (Clean Architecture)
+│       │   │   └── index.ts        # All API and DTO interface types
+│       │   ├── api/                # Modular API client layer
+│       │   │   ├── http.ts         # fetchJson, in-memory SWR cache (fetchCachedJson), invalidateCache
+│       │   │   ├── auth.ts         # Authentication endpoints
+│       │   │   ├── services.ts     # Service CRUD and reordering
+│       │   │   ├── containers.ts   # Container operations, batch stats (/stats-summary), and logs
+│       │   │   ├── uptime.ts       # Uptime checks and push monitors
+│       │   │   ├── metrics.ts      # Hardware metrics
+│       │   │   ├── settings.ts     # Settings and backup
+│       │   │   ├── index.ts        # Unified API object
+│       │   │   └── client.ts       # Backward compatibility re-export layer
 │       │   ├── i18n/               # Compile-time type-safe multi-language system
 │       │   │   ├── en.ts           # Primary English dictionary
 │       │   │   ├── tr.ts           # Turkish translation dictionary
@@ -95,7 +106,8 @@ corvus/
 │       │   │   └── index.tsx       # I18nProvider and useI18n hook
 │       │   ├── utils/              # Modular helper and utility functions
 │       │   │   ├── url.ts          # Service URL formatter and sanitization
-│       │   │   └── format.ts       # Byte sizing (B, KB, MB, GB, TB) formatter
+│       │   │   ├── format.ts       # Byte sizing (B, KB, MB, GB, TB) formatter
+│       │   │   └── grouping.ts     # Docker Compose intelligent grouping logic
 │       │   ├── components/         # Shared global UI components ONLY
 │       │   │   ├── Sidebar.tsx               # Responsive desktop rail & mobile slide-over drawer
 │       │   │   ├── StatusBadge.tsx           # Health indicator badge (healthy, degraded, down)
@@ -105,14 +117,18 @@ corvus/
 │       │       ├── AuthPage/
 │       │       │   └── index.tsx             # Sign in and initial registration view
 │       │       ├── Containers/
-│       │       │   ├── index.tsx             # Page orchestrator & state manager (<200 lines)
+│       │       │   ├── index.tsx             # Page orchestrator & state manager (<250 lines)
 │       │       │   ├── ContainerList.tsx     # Responsive mobile cards and desktop table
 │       │       │   ├── ComposeStackGroup.tsx # Collapsible Docker Compose stack accordions
 │       │       │   ├── ContainerStatsBadges.tsx # Real-time CPU, RAM, Net I/O badges
 │       │       │   ├── ContainerActionButtons.tsx # Lifecycle controls with loading states
 │       │       │   └── ContainerLogsModal.tsx   # Live container log streaming terminal
 │       │       ├── Dashboard/
-│       │       │   └── index.tsx             # Consolidated KPI summary & active services
+│       │       │   ├── index.tsx             # Consolidated KPI summary & active services
+│       │       │   ├── SystemPulseHero.tsx   # Live system pulse, network I/O & update checker
+│       │       │   ├── SystemKpiStrip.tsx    # 2-column compact KPI strip & full-width Disk bar
+│       │       │   ├── AttentionRequiredCard.tsx # Degraded services and SSL certificate warning card
+│       │       │   └── ActiveContainersWidget.tsx # 2-column responsive active containers card
 │       │       ├── PublicStatus/
 │       │       │   └── index.tsx             # Unauthenticated status page (/status)
 │       │       ├── Services/
@@ -138,12 +154,13 @@ corvus/
 │       └── wwwroot/                # Production compiled bundle output (hosted by Corvus.Api)
 │
 ├── tests/
-│   └── Corvus.Api.Tests/           # xUnit Test Suite (64 Passing Tests)
+│   └── Corvus.Api.Tests/           # xUnit Test Suite (85 Passing Tests)
 │       ├── AuthServiceTests.cs
-│       ├── DockerServiceTests.cs
+│       ├── DockerServiceTests.cs     # Container operations, micro-cache, and batch stats tests
 │       ├── DockerLogDemuxerTests.cs
 │       ├── NotificationServiceTests.cs
 │       ├── RoadmapFeaturesTests.cs
+│       ├── UpdateCheckerTests.cs
 │       └── DatabaseMigrationAndRepositoryTests.cs
 │
 └── docs/                           # Technical specifications and architectural guides
@@ -166,14 +183,14 @@ Corvus strictly adheres to **Clean Architecture** and **Single Responsibility** 
 
 ### 2. Centralized API Service Layer
 - UI components **never** perform raw `fetch()` calls or handle HTTP protocol details directly.
-- All backend communication is encapsulated in `src/api/client.ts` with strict TypeScript typing. Pages simply call `api.getServices()`, `api.startContainer()`, etc.
+- All backend communication is encapsulated in modular files under `src/api/` (`http.ts`, `services.ts`, `containers.ts`, etc.) with strict TypeScript typing and built-in SWR in-memory caching.
 
 ### 3. Feature-Scoped Modals and Tabs
 - Modals, dialogs, and tabs that belong to a single page are colocated within that page's feature folder (e.g. `pages/Services/AddServiceModal.tsx`, `pages/Uptime/AddSnitchModal.tsx`, `pages/Containers/ContainerLogsModal.tsx`).
 - `src/components/` is strictly reserved for truly global, cross-page elements (`Sidebar`, `StatusBadge`, `LanguageSwitch`, `RegistrationPromptModal`).
 
 ### 4. Utility Isolation
-- Formatting, mathematical transforms, and URL normalization are never buried inside UI render trees. They reside in `src/utils/` (`url.ts`, `format.ts`) and are covered by clean function signatures.
+- Formatting, mathematical transforms, and URL normalization are never buried inside UI render trees. They reside in `src/utils/` (`url.ts`, `format.ts`, `grouping.ts`) and are covered by clean function signatures.
 
 ### 5. Backend Vertical Slices
 - Endpoints are grouped cleanly by domain in `Endpoints/` as extension methods (`app.MapContainersEndpoints()`, `app.MapServicesEndpoints()`).
@@ -201,3 +218,29 @@ sequenceDiagram
     API->>SQLite: Log Audit Event
     API-->>Browser: Optimistic Update + JSON Response
 ```
+
+---
+
+## 🧠 Memory Resilience and In-Memory Micro-Cache
+
+Corvus implements a multi-tier optimization architecture to sustain system memory usage within **30–45 MB** without relying on an external cache server (such as Redis):
+
+1. **Zero-Dependency Micro-Cache:**
+   - Docker socket reads (`GetContainersAsync`) and Dashboard summaries (`GET /api/dashboard/summary`) are cached for 2.5 seconds.
+   - Uptime 24-hour percentage aggregations (`Get24hUptimePercentagesAsync`) are micro-cached for 5 seconds.
+   - Rapid navigation between views reduces Docker socket calls and SQLite allocations by more than 90%.
+2. **Batch Stats Endpoint:**
+   - Replaces N+1 parallel socket reads with a single consolidated stream via `GET /api/containers/stats-summary`, gathering resource stats for all running containers at once.
+3. **.NET 9 Elastic Memory Tuning (`System.GC.ConserveMemory=5`):**
+   - Configures the CLR to eagerly release idle virtual memory pages back to the Linux kernel (`madvise`) following traffic spikes.
+   - `RetentionCleanupService` performs an optimized Gen1 GC collection (`GC.Collect(1, GCCollectionMode.Optimized)`) after pruning expired records.
+
+---
+
+## 🛡️ Uptime Kuma-Grade 3-State Health Engine
+
+To prevent false alarms from transient network latency or brief blips, Corvus applies a 3-state finite state machine for service health verification:
+- **`healthy`:** Service responds promptly and passes HTTP 2xx/3xx or TCP port checks.
+- **`degraded`:** A first failure is detected; the monitor enters degraded status with a yellow warning indicator, suppressing alarm dispatches.
+- **`down`:** After 3 consecutive failures, the service transitions to down (red) and immediately dispatches alerts across configured notification webhooks (Discord, Telegram, Ntfy, Webhook).
+- **Loopback Gateway Resolution:** Corvus automatically resolves loopback targets (`localhost`, `127.0.0.1`) to the Docker bridge gateway (`host.docker.internal`) so checks run accurately from within containerized environments.
