@@ -72,8 +72,8 @@ export const ActiveContainersWidget: React.FC<ActiveContainersWidgetProps> = ({
         )}
       </div>
 
-      {/* Kompakt Konteyner Izgarası (Minimal, Kart & Metin Yığını Yok) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {/* Kompakt Konteyner Izgarası (Mobil: Yan yana 2 kolon, Masaüstü: 3 kolon) */}
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
         {displayContainers.map((container) => {
           const name = getCleanName(container);
           const image = getShortImage(container.Image);
@@ -83,19 +83,19 @@ export const ActiveContainersWidget: React.FC<ActiveContainersWidgetProps> = ({
             <div
               key={container.Id}
               onClick={() => onNavigate?.('containers')}
-              className="p-3.5 rounded-xl bg-[#0f1117] border border-[#2a2e3f]/80 hover:border-[#3f4458] transition-all cursor-pointer flex items-center justify-between gap-3 group"
+              className="p-2.5 sm:p-3.5 rounded-xl bg-[#0f1117] border border-[#2a2e3f]/80 hover:border-[#3f4458] transition-all cursor-pointer flex items-center justify-between gap-2 group"
             >
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                  <span className="text-xs font-semibold text-[#e5e7eb] group-hover:text-white truncate">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-400 shrink-0" />
+                  <span className="text-[11px] sm:text-xs font-semibold text-[#e5e7eb] group-hover:text-white truncate">
                     {name}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 mt-1 text-[11px] font-mono text-[#9ca3af] truncate">
+                <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] font-mono text-[#9ca3af] truncate">
                   <span className="truncate">{image}</span>
                   {port && (
-                    <span className="text-indigo-400 shrink-0">{port}</span>
+                    <span className="text-indigo-400 shrink-0 text-[9px] sm:text-[11px]">{port}</span>
                   )}
                 </div>
               </div>
