@@ -47,6 +47,15 @@ public class AuthServiceTests
 
         public Task<Dictionary<string, string>> GetAllAsync() =>
             Task.FromResult(new Dictionary<string, string>(_dict));
+
+        public Task SetBatchAsync(Dictionary<string, string> settings)
+        {
+            foreach (var (k, v) in settings)
+            {
+                _dict[k] = v;
+            }
+            return Task.CompletedTask;
+        }
     }
 
     private static AuthService CreateService(

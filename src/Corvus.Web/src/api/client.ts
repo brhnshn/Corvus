@@ -91,6 +91,15 @@ export interface BackupEvent {
   message?: string;
 }
 
+export interface UptimeCheckItem {
+  id: number;
+  serviceId: string;
+  checkedAt: string;
+  status: string;
+  responseTimeMs?: number;
+  errorMessage?: string;
+}
+
 export interface DashboardSummary {
   totalServices: number;
   healthyServices: number;
@@ -127,6 +136,12 @@ export async function fetchJson<T>(url: string, options?: RequestInit): Promise<
       const errBody = await res.json();
       if (errBody?.message) {
         errMsg = errBody.message;
+      } else if (errBody?.detail) {
+        errMsg = errBody.detail;
+      } else if (errBody?.title) {
+        errMsg = errBody.title;
+      } else if (errBody?.error) {
+        errMsg = typeof errBody.error === 'string' ? errBody.error : JSON.stringify(errBody.error);
       }
     } catch {
       // fallback to status text
@@ -137,83 +152,196 @@ export async function fetchJson<T>(url: string, options?: RequestInit): Promise<
   return res.json();
 }
 
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+  ttl: number;
+}
+
+const apiCache = new Map<string, CacheEntry<unknown>>();
+
+export function invalidateCache(urlPattern?: string) {
+  if (!urlPattern) {
+    apiCache.clear();
+    return;
+  }
+  for (const key of apiCache.keys()) {
+    if (key.includes(urlPattern)) {
+      apiCache.delete(key);
+    }
+  }
+}
+
+export async function fetchCachedJson<T>(url: string, options?: RequestInit, ttlMs = 30000): Promise<T> {
+  if (options && options.method && options.method.toUpperCase() !== 'GET') {
+    return fetchJson<T>(url, options);
+  }
+
+  const now = Date.now();
+  const cached = apiCache.get(url) as CacheEntry<T> | undefined;
+
+  if (cached && (now - cached.timestamp < cached.ttl)) {
+    return cached.data;
+  }
+
+  const data = await fetchJson<T>(url, options);
+  apiCache.set(url, { data, timestamp: now, ttl: ttlMs });
+  return data;
+}
+
 export const api = {
   // Auth
   getAuthStatus: () => fetchJson<AuthStatus>('/auth/status'),
-  login: (data: { username: string; password: string }) => fetchJson<{ success: boolean; message?: string }>('/auth/login', {
-    method: 'POST',
-    body: JSON.stringify(data)
-  }),
-  register: (data: { username: string; password: string }) => fetchJson<{ success: boolean; message?: string }>('/auth/register', {
-    method: 'POST',
-    body: JSON.stringify(data)
-  }),
+  login: async (data: { username: string; password: string }) => {
+    const res = await fetchJson<{ success: boolean; message?: string }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+    invalidateCache();
+    return res;
+  },
+  register: async (data: { username: string; password: string }) => {
+    const res = await fetchJson<{ success: boolean; message?: string }>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+    invalidateCache();
+    return res;
+  },
   toggleRegistration: (enabled: boolean) => fetchJson<{ success: boolean; message?: string }>('/auth/toggle-registration', {
     method: 'POST',
     body: JSON.stringify({ enabled })
   }),
-  logout: () => fetchJson<{ success: boolean; message?: string }>('/auth/logout', {
-    method: 'POST'
-  }),
+  logout: async () => {
+    const res = await fetchJson<{ success: boolean; message?: string }>('/auth/logout', {
+      method: 'POST'
+    });
+    invalidateCache();
+    return res;
+  },
 
-  // Dashboard & Services
-  getDashboardSummary: () => fetchJson<DashboardSummary>('/dashboard/summary'),
-  getServices: () => fetchJson<Service[]>('/services'),
-  getService: (id: string) => fetchJson<Service>(`/services/${id}`),
-  createService: (data: Partial<Service>) => fetchJson<Service>('/services', {
-    method: 'POST',
-    body: JSON.stringify(data)
-  }),
-  updateService: (id: string, data: Partial<Service>) => fetchJson<Service>(`/services/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(data)
-  }),
-  deleteService: (id: string) => fetchJson<{ success: boolean; message?: string }>(`/services/${id}`, {
-    method: 'DELETE'
-  }),
-  reorderServices: (serviceIds: string[]) => fetchJson<{ success: boolean; message?: string }>('/services/reorder', {
-    method: 'PUT',
-    body: JSON.stringify({ serviceIds })
-  }),
+  // Dashboard & Services (Cache-First)
+  getDashboardSummary: () => fetchCachedJson<DashboardSummary>('/dashboard/summary', undefined, 20000),
+  getServices: () => fetchCachedJson<Service[]>('/services', undefined, 30000),
+  getService: (id: string) => fetchCachedJson<Service>(`/services/${id}`, undefined, 30000),
+  createService: async (data: Partial<Service>) => {
+    const res = await fetchJson<Service>('/services', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+    invalidateCache('/services');
+    invalidateCache('/dashboard');
+    return res;
+  },
+  updateService: async (id: string, data: Partial<Service>) => {
+    const res = await fetchJson<Service>(`/services/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+    invalidateCache('/services');
+    invalidateCache('/dashboard');
+    return res;
+  },
+  deleteService: async (id: string) => {
+    const res = await fetchJson<{ success: boolean; message?: string }>(`/services/${id}`, {
+      method: 'DELETE'
+    });
+    invalidateCache('/services');
+    invalidateCache('/dashboard');
+    return res;
+  },
+  reorderServices: async (serviceIds: string[]) => {
+    const res = await fetchJson<{ success: boolean; message?: string }>('/services/reorder', {
+      method: 'PUT',
+      body: JSON.stringify({ serviceIds })
+    });
+    invalidateCache('/services');
+    invalidateCache('/dashboard');
+    return res;
+  },
 
   // Public Status Page
   getPublicStatusPage: () => fetchJson<PublicStatusPage>('/status-page'),
 
-  // Containers
-  getContainers: () => fetchJson<DockerContainer[]>('/containers'),
+  // Containers (Cache-First)
+  getContainers: () => fetchCachedJson<DockerContainer[]>('/containers', undefined, 15000),
   getContainerStats: (id: string) => fetchJson<ContainerStats>(`/containers/${id}/stats`),
-  restartContainer: (id: string) => fetchJson<{ success: boolean }>(`/containers/${id}/restart`, {
-    method: 'POST'
-  }),
-  startContainer: (id: string) => fetchJson<{ success: boolean }>(`/containers/${id}/start`, {
-    method: 'POST'
-  }),
-  stopContainer: (id: string) => fetchJson<{ success: boolean }>(`/containers/${id}/stop`, {
-    method: 'POST'
-  }),
-  pauseContainer: (id: string) => fetchJson<{ success: boolean }>(`/containers/${id}/pause`, {
-    method: 'POST'
-  }),
-  unpauseContainer: (id: string) => fetchJson<{ success: boolean }>(`/containers/${id}/unpause`, {
-    method: 'POST'
-  }),
+  restartContainer: async (id: string) => {
+    const res = await fetchJson<{ success: boolean; message?: string }>(`/containers/${id}/restart`, {
+      method: 'POST'
+    });
+    invalidateCache('/containers');
+    invalidateCache('/services');
+    invalidateCache('/dashboard');
+    return res;
+  },
+  startContainer: async (id: string) => {
+    const res = await fetchJson<{ success: boolean; message?: string }>(`/containers/${id}/start`, {
+      method: 'POST'
+    });
+    invalidateCache('/containers');
+    invalidateCache('/services');
+    invalidateCache('/dashboard');
+    return res;
+  },
+  stopContainer: async (id: string) => {
+    const res = await fetchJson<{ success: boolean; message?: string }>(`/containers/${id}/stop`, {
+      method: 'POST'
+    });
+    invalidateCache('/containers');
+    invalidateCache('/services');
+    invalidateCache('/dashboard');
+    return res;
+  },
+  pauseContainer: async (id: string) => {
+    const res = await fetchJson<{ success: boolean; message?: string }>(`/containers/${id}/pause`, {
+      method: 'POST'
+    });
+    invalidateCache('/containers');
+    invalidateCache('/services');
+    invalidateCache('/dashboard');
+    return res;
+  },
+  unpauseContainer: async (id: string) => {
+    const res = await fetchJson<{ success: boolean; message?: string }>(`/containers/${id}/unpause`, {
+      method: 'POST'
+    });
+    invalidateCache('/containers');
+    invalidateCache('/services');
+    invalidateCache('/dashboard');
+    return res;
+  },
   getContainerLogs: (id: string, tail = 100) => fetchJson<{ containerId: string; lines: string[] }>(`/containers/${id}/logs?tail=${tail}`),
 
-  // Dead Man's Snitch (Push Monitors)
-  getPushMonitors: () => fetchJson<PushMonitor[]>('/push-monitors'),
-  createPushMonitor: (data: { name: string; token?: string; expectedIntervalMinutes: number; gracePeriodMinutes: number }) => 
-    fetchJson<PushMonitor>('/push-monitors', {
+  // Dead Man's Snitch (Push Monitors - Cache-First)
+  getPushMonitors: () => fetchCachedJson<PushMonitor[]>('/push-monitors', undefined, 30000),
+  createPushMonitor: async (data: { name: string; token?: string; expectedIntervalMinutes: number; gracePeriodMinutes: number }) => {
+    const res = await fetchJson<PushMonitor>('/push-monitors', {
       method: 'POST',
       body: JSON.stringify(data)
-    }),
-  updatePushMonitor: (id: string, data: { name: string; expectedIntervalMinutes: number; gracePeriodMinutes: number }) => 
-    fetchJson<PushMonitor>(`/push-monitors/${id}`, {
+    });
+    invalidateCache('/push-monitors');
+    return res;
+  },
+  updatePushMonitor: async (id: string, data: { name: string; expectedIntervalMinutes: number; gracePeriodMinutes: number }) => {
+    const res = await fetchJson<PushMonitor>(`/push-monitors/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data)
-    }),
-  deletePushMonitor: (id: string) => fetchJson<{ success: boolean }>(`/push-monitors/${id}`, {
-    method: 'DELETE'
-  }),
+    });
+    invalidateCache('/push-monitors');
+    return res;
+  },
+  deletePushMonitor: async (id: string) => {
+    const res = await fetchJson<{ success: boolean }>(`/push-monitors/${id}`, {
+      method: 'DELETE'
+    });
+    invalidateCache('/push-monitors');
+    return res;
+  },
+
+  // Uptime Checks
+  getUptimeChecks: (serviceId: string, range = '7d') => 
+    fetchJson<UptimeCheckItem[]>(`/uptime?service_id=${serviceId}&range=${range}`),
 
   // Notifications
   testNotification: (data: { channel: string; webhookUrl?: string; botToken?: string; chatId?: string }) => 
@@ -222,18 +350,29 @@ export const api = {
       body: JSON.stringify(data)
     }),
 
-  // Metrics & System
-  getSystemMetrics: (range = '24h') => fetchJson<SystemMetric[]>(`/metrics/system?range=${range}`),
-  getLatestMetrics: () => fetchJson<SystemMetric>('/metrics/latest'),
-  getBackupEvents: (limit = 10) => fetchJson<BackupEvent[]>(`/backup-events?limit=${limit}`),
-  getSettings: () => fetchJson<Record<string, string>>('/settings'),
-  updateSettings: (settings: Record<string, string>) => fetchJson<{ success: boolean }>('/settings', {
-    method: 'PUT',
-    body: JSON.stringify(settings)
-  }),
+  // Metrics & System (Cache-First)
+  getSystemMetrics: (range = '24h') => fetchCachedJson<SystemMetric[]>(`/metrics/system?range=${range}`, undefined, 30000),
+  getLatestMetrics: () => fetchCachedJson<SystemMetric>('/metrics/latest', undefined, 15000),
+  getBackupEvents: (limit = 10) => fetchCachedJson<BackupEvent[]>(`/backup-events?limit=${limit}`, undefined, 30000),
+  // Settings & DB Management
+  getSettings: () => fetchCachedJson<Record<string, string>>('/settings', undefined, 60000),
+  updateSettings: async (settings: Record<string, string>) => {
+    const res = await fetchJson<{ success: boolean }>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings)
+    });
+    invalidateCache('/settings');
+    return res;
+  },
+  getDbStats: () => fetchJson<{ formattedSize: string; sizeBytes: number; dbSizeBytes: number; walSizeBytes: number }>('/settings/db-stats'),
+  downloadBackup: async () => {
+    const res = await fetch('/api/backup/download');
+    if (!res.ok) throw new Error('Yedek indirilemedi');
+    return res.blob();
+  },
 
   // Version & Updates
-  getVersion: () => fetchJson<VersionInfo>('/version')
+  getVersion: () => fetchCachedJson<VersionInfo>('/version', undefined, 300000)
 };
 
 export interface VersionInfo {

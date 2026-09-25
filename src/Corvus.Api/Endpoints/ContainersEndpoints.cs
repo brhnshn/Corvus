@@ -17,42 +17,52 @@ public static class ContainersEndpoints
 
         group.MapPost("/{id}/restart", async (string id, IDockerService docker) =>
         {
-            bool success = await docker.RestartContainerAsync(id);
-            return success 
-                ? Results.Ok(new GenericApiResponse(true, "Container yeniden başlatıldı.")) 
-                : Results.Problem("Container yeniden başlatılamadı.");
+            var result = await docker.RestartContainerAsync(id);
+            return result.Success 
+                ? Results.Ok(new GenericApiResponse(true, result.Message ?? "Container yeniden başlatıldı.")) 
+                : Results.Json(new GenericApiResponse(false, result.Message ?? "Container yeniden başlatılamadı."), 
+                               CorvusJsonSerializerContext.Default.GenericApiResponse, 
+                               statusCode: result.StatusCode == 200 ? 400 : result.StatusCode);
         });
 
         group.MapPost("/{id}/start", async (string id, IDockerService docker) =>
         {
-            bool success = await docker.StartContainerAsync(id);
-            return success 
-                ? Results.Ok(new GenericApiResponse(true, "Container başlatıldı.")) 
-                : Results.Problem("Container başlatılamadı.");
+            var result = await docker.StartContainerAsync(id);
+            return result.Success 
+                ? Results.Ok(new GenericApiResponse(true, result.Message ?? "Container başlatıldı.")) 
+                : Results.Json(new GenericApiResponse(false, result.Message ?? "Container başlatılamadı."), 
+                               CorvusJsonSerializerContext.Default.GenericApiResponse, 
+                               statusCode: result.StatusCode == 200 ? 400 : result.StatusCode);
         });
 
         group.MapPost("/{id}/stop", async (string id, IDockerService docker) =>
         {
-            bool success = await docker.StopContainerAsync(id);
-            return success 
-                ? Results.Ok(new GenericApiResponse(true, "Container durduruldu.")) 
-                : Results.Problem("Container durdurulamadı.");
+            var result = await docker.StopContainerAsync(id);
+            return result.Success 
+                ? Results.Ok(new GenericApiResponse(true, result.Message ?? "Container durduruldu.")) 
+                : Results.Json(new GenericApiResponse(false, result.Message ?? "Container durdurulamadı."), 
+                               CorvusJsonSerializerContext.Default.GenericApiResponse, 
+                               statusCode: result.StatusCode == 200 ? 400 : result.StatusCode);
         });
 
         group.MapPost("/{id}/pause", async (string id, IDockerService docker) =>
         {
-            bool success = await docker.PauseContainerAsync(id);
-            return success 
-                ? Results.Ok(new GenericApiResponse(true, "Container duraklatıldı.")) 
-                : Results.Problem("Container duraklatılamadı.");
+            var result = await docker.PauseContainerAsync(id);
+            return result.Success 
+                ? Results.Ok(new GenericApiResponse(true, result.Message ?? "Container duraklatıldı.")) 
+                : Results.Json(new GenericApiResponse(false, result.Message ?? "Container duraklatılamadı."), 
+                               CorvusJsonSerializerContext.Default.GenericApiResponse, 
+                               statusCode: result.StatusCode == 200 ? 400 : result.StatusCode);
         });
 
         group.MapPost("/{id}/unpause", async (string id, IDockerService docker) =>
         {
-            bool success = await docker.UnpauseContainerAsync(id);
-            return success 
-                ? Results.Ok(new GenericApiResponse(true, "Container devam ettirildi.")) 
-                : Results.Problem("Container devam ettirilemedi.");
+            var result = await docker.UnpauseContainerAsync(id);
+            return result.Success 
+                ? Results.Ok(new GenericApiResponse(true, result.Message ?? "Container devam ettirildi.")) 
+                : Results.Json(new GenericApiResponse(false, result.Message ?? "Container devam ettirilemedi."), 
+                               CorvusJsonSerializerContext.Default.GenericApiResponse, 
+                               statusCode: result.StatusCode == 200 ? 400 : result.StatusCode);
         });
 
         group.MapGet("/{id}/stats", async (string id, IDockerService docker, CancellationToken ct) =>

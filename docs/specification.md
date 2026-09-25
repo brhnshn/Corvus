@@ -233,4 +233,4 @@ Incoming push monitor heartbeat records.
 - [x] Full compile-time typed bilingual i18n system (English default, Turkish complete)
 - [x] Dual-mode backup management: One-click lock-free SQLite snapshot download (`GET /api/backup/download`) with SSE live Dashboard updates + external push integration
 - [x] Flexible data retention & disk telemetry: Presets, Unlimited mode with disk advisory, live DB size indicator, and dynamic `RetentionCleanupService`
-- [x] 60/60 passing xUnit test coverage
+- [x] 64/64 passing xUnit test coverage

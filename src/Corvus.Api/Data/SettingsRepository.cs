@@ -7,6 +7,7 @@ public interface ISettingsRepository
     Task<Dictionary<string, string>> GetAllAsync();
     Task<string?> GetAsync(string key);
     Task SetAsync(string key, string value);
+    Task SetBatchAsync(Dictionary<string, string> settings);
 }
 
 public class SettingsRepository : ISettingsRepository
@@ -50,5 +51,27 @@ public class SettingsRepository : ISettingsRepository
                 updated_at = excluded.updated_at";
 
         await conn.ExecuteAsync(sql, new { key, value, now });
+    }
+
+    public async Task SetBatchAsync(Dictionary<string, string> settings)
+    {
+        if (settings == null || settings.Count == 0) return;
+
+        using var conn = (Microsoft.Data.Sqlite.SqliteConnection)_db.CreateConnection();
+        using var tx = conn.BeginTransaction();
+        string now = DateTime.UtcNow.ToString("o");
+        var sql = @"
+            INSERT INTO settings (key, value, updated_at)
+            VALUES (@key, @value, @now)
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = excluded.updated_at";
+
+        foreach (var (k, v) in settings)
+        {
+            await conn.ExecuteAsync(sql, new { key = k, value = v, now }, tx);
+        }
+
+        tx.Commit();
     }
 }

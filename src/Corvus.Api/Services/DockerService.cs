@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Corvus.Api.Models;
 
 namespace Corvus.Api.Services;
@@ -7,11 +8,11 @@ public interface IDockerService
     Task<bool> IsAvailableAsync(CancellationToken cancellationToken = default);
     Task<DockerVersionInfo?> GetVersionAsync(CancellationToken cancellationToken = default);
     Task<List<DockerContainerInfo>> GetContainersAsync(CancellationToken cancellationToken = default);
-    Task<bool> RestartContainerAsync(string containerId, CancellationToken cancellationToken = default);
-    Task<bool> StartContainerAsync(string containerId, CancellationToken cancellationToken = default);
-    Task<bool> StopContainerAsync(string containerId, CancellationToken cancellationToken = default);
-    Task<bool> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default);
-    Task<bool> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<DockerActionResult> RestartContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<DockerActionResult> StartContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<DockerActionResult> StopContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<DockerActionResult> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<DockerActionResult> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default);
     Task<ContainerStatsDto?> GetContainerStatsAsync(string containerId, CancellationToken cancellationToken = default);
     Task<List<string>> GetContainerLogsAsync(string containerId, int tail = 100, CancellationToken cancellationToken = default);
     bool ShouldIgnoreContainer(DockerContainerInfo container);
@@ -22,6 +23,7 @@ public class DockerService : IDockerService
 {
     private readonly IDockerHttpClient _client;
     private readonly ILogger<DockerService> _logger;
+    private readonly ConcurrentDictionary<string, (DateTime Expiry, ContainerStatsDto Stats)> _statsCache = new();
 
     public DockerService(IDockerHttpClient client, ILogger<DockerService> logger)
     {
@@ -38,23 +40,36 @@ public class DockerService : IDockerService
     public Task<List<DockerContainerInfo>> GetContainersAsync(CancellationToken cancellationToken = default) =>
         _client.ListContainersAsync(all: true, cancellationToken);
 
-    public Task<bool> RestartContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
+    public Task<DockerActionResult> RestartContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
         _client.RestartContainerAsync(containerId, cancellationToken);
 
-    public Task<bool> StartContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
+    public Task<DockerActionResult> StartContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
         _client.StartContainerAsync(containerId, cancellationToken);
 
-    public Task<bool> StopContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
+    public Task<DockerActionResult> StopContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
         _client.StopContainerAsync(containerId, cancellationToken);
 
-    public Task<bool> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
+    public Task<DockerActionResult> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
         _client.PauseContainerAsync(containerId, cancellationToken);
 
-    public Task<bool> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
+    public Task<DockerActionResult> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
         _client.UnpauseContainerAsync(containerId, cancellationToken);
 
-    public Task<ContainerStatsDto?> GetContainerStatsAsync(string containerId, CancellationToken cancellationToken = default) =>
-        _client.GetContainerStatsAsync(containerId, cancellationToken);
+    public async Task<ContainerStatsDto?> GetContainerStatsAsync(string containerId, CancellationToken cancellationToken = default)
+    {
+        if (_statsCache.TryGetValue(containerId, out var cached) && DateTime.UtcNow < cached.Expiry)
+        {
+            return cached.Stats;
+        }
+
+        var stats = await _client.GetContainerStatsAsync(containerId, cancellationToken);
+        if (stats != null)
+        {
+            _statsCache[containerId] = (DateTime.UtcNow.AddSeconds(3), stats);
+        }
+
+        return stats;
+    }
 
     public Task<List<string>> GetContainerLogsAsync(string containerId, int tail = 100, CancellationToken cancellationToken = default) =>
         _client.GetContainerLogsAsync(containerId, tail, cancellationToken);
@@ -68,6 +83,53 @@ public class DockerService : IDockerService
         }
 
         return false;
+    }
+
+    private static string? ExtractDomainFromLabels(IReadOnlyDictionary<string, string> labels)
+    {
+        // 1. Traefik Router Host rule (örn: "Host(`app.example.com`)" veya "Host(`api.example.com`, `admin.example.com`)")
+        foreach (var kvp in labels)
+        {
+            if (kvp.Key.StartsWith("traefik.http.routers.", StringComparison.OrdinalIgnoreCase) &&
+                kvp.Key.EndsWith(".rule", StringComparison.OrdinalIgnoreCase))
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(
+                    kvp.Value, 
+                    @"Host\s*\(\s*[`""](?<domain>[^`"",\s]+)[`""]", 
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+                if (match.Success)
+                {
+                    string domain = match.Groups["domain"].Value.Trim();
+                    if (!string.IsNullOrWhiteSpace(domain))
+                    {
+                        return $"https://{domain}";
+                    }
+                }
+            }
+        }
+
+        // 2. Caddy etiketi (örn: caddy="example.com" veya caddy.reverse_proxy)
+        if (labels.TryGetValue("caddy", out var caddyHost) && !string.IsNullOrWhiteSpace(caddyHost))
+        {
+            string host = caddyHost.Trim().Split(' ', ',')[0];
+            if (!string.IsNullOrWhiteSpace(host))
+            {
+                return host.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? host : $"https://{host}";
+            }
+        }
+
+        // 3. Virtual Host etiketi (Nginx proxy / Docker-gen: VIRTUAL_HOST=app.example.com)
+        if (labels.TryGetValue("VIRTUAL_HOST", out var vHost) && !string.IsNullOrWhiteSpace(vHost))
+        {
+            string host = vHost.Trim().Split(',')[0].Trim();
+            if (!string.IsNullOrWhiteSpace(host))
+            {
+                return host.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? host : $"http://{host}";
+            }
+        }
+
+        return null;
     }
 
     public Service MapContainerToService(DockerContainerInfo container)
@@ -91,9 +153,19 @@ public class DockerService : IDockerService
             ? lIcon
             : null;
 
-        string category = labels.TryGetValue("corvus.category", out var lCat) && !string.IsNullOrWhiteSpace(lCat)
-            ? lCat
-            : "Container'lar";
+        string category;
+        if (labels.TryGetValue("corvus.category", out var lCat) && !string.IsNullOrWhiteSpace(lCat))
+        {
+            category = lCat;
+        }
+        else if (labels.TryGetValue("com.docker.compose.project", out var composeProj) && !string.IsNullOrWhiteSpace(composeProj))
+        {
+            category = $"{char.ToUpperInvariant(composeProj[0])}{composeProj[1..]}";
+        }
+        else
+        {
+            category = "Container'lar";
+        }
 
         string? url = null;
         if (labels.TryGetValue("corvus.url", out var lUrl) && !string.IsNullOrWhiteSpace(lUrl))
@@ -102,11 +174,18 @@ public class DockerService : IDockerService
         }
         else
         {
+            // Ters Proxy (Traefik, Caddy, VIRTUAL_HOST) etiketlerinden otomatik domain çıkarımı
+            url = ExtractDomainFromLabels(labels);
+
             // Port bindings'den varsayılan URL türetme
-            var pubPort = container.Ports?.FirstOrDefault(p => p.PublicPort.HasValue && p.PublicPort > 0);
-            if (pubPort?.PublicPort != null)
+            if (string.IsNullOrWhiteSpace(url))
             {
-                url = $"http://localhost:{pubPort.PublicPort}";
+                var pubPort = container.Ports?.FirstOrDefault(p => p.PublicPort.HasValue && p.PublicPort > 0);
+                if (pubPort?.PublicPort != null)
+                {
+                    string host = Environment.GetEnvironmentVariable("CORVUS_PUBLIC_HOST") ?? "localhost";
+                    url = $"http://{host}:{pubPort.PublicPort}";
+                }
             }
         }
 

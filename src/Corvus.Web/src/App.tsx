@@ -1,5 +1,5 @@
 import React, { useEffect, useState, Suspense, lazy } from 'react';
-import { api, type AuthStatus } from './api/client';
+import { api, type AuthStatus, invalidateCache } from './api/client';
 import { Sidebar, type PageId } from './components/Sidebar';
 import { RegistrationPromptModal } from './components/RegistrationPromptModal';
 import { Menu, RefreshCw } from 'lucide-react';
@@ -24,14 +24,41 @@ const PageLoader = () => (
   </div>
 );
 
+const VALID_PAGES: PageId[] = ['dashboard', 'services', 'containers', 'metrics', 'uptime', 'settings'];
+
+const getInitialPage = (): PageId => {
+  const path = window.location.pathname.replace(/^\//, '').toLowerCase();
+  if (VALID_PAGES.includes(path as PageId)) {
+    return path as PageId;
+  }
+  return 'dashboard';
+};
+
 export const App: React.FC = () => {
   const { t } = useI18n();
   const isStatusPath = window.location.pathname === '/status' || window.location.pathname.startsWith('/status');
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [authLoading, setAuthLoading] = useState(!isStatusPath);
-  const [currentPage, setCurrentPage] = useState<PageId>('dashboard');
+  const [currentPage, setCurrentPage] = useState<PageId>(getInitialPage);
   const [showRegPrompt, setShowRegPrompt] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const navigateTo = (page: PageId) => {
+    setCurrentPage(page);
+    const newPath = page === 'dashboard' ? '/' : `/${page}`;
+    if (window.location.pathname !== newPath) {
+      window.history.pushState(null, '', newPath);
+    }
+  };
+
+  // Tarayıcı Geri/İleri butonları için popstate dinleyicisi
+  useEffect(() => {
+    const handlePopState = () => {
+      setCurrentPage(getInitialPage());
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const checkAuth = async () => {
     try {
@@ -61,6 +88,14 @@ export const App: React.FC = () => {
         try {
           const parsed = JSON.parse(event.data);
           window.dispatchEvent(new CustomEvent('corvus_event', { detail: parsed }));
+          // SSE olaylarına göre ilgili cache verilerini temizle
+          if (parsed.type?.includes('container')) {
+            invalidateCache('/containers');
+            invalidateCache('/dashboard');
+          } else if (parsed.type?.includes('service')) {
+            invalidateCache('/services');
+            invalidateCache('/dashboard');
+          }
         } catch {
           // ignore keepalive/ping
         }
@@ -164,12 +199,23 @@ export const App: React.FC = () => {
     }
   };
 
+  // Sayfa ve dil değişimlerine göre dinamik tarayıcı sekme başlığı (document.title)
+  useEffect(() => {
+    if (isStatusPath) {
+      document.title = `${t('publicStatus.badge')} - Corvus`;
+    } else if (authStatus && authStatus.authEnabled && !authStatus.isAuthenticated) {
+      document.title = `${t('auth.tabLogin')} - Corvus`;
+    } else {
+      document.title = `${getPageTitle(currentPage)} - Corvus`;
+    }
+  }, [currentPage, isStatusPath, authStatus, t]);
+
   return (
     <div className="min-h-screen bg-[#0f1117] text-[#e5e7eb] flex flex-col lg:flex-row">
       {/* Sidebar (Desktop kalıcı, Mobil & Tablet drawer) */}
       <Sidebar 
         currentPage={currentPage} 
-        onSelectPage={setCurrentPage} 
+        onSelectPage={navigateTo} 
         username={authStatus?.username}
         onLogout={authStatus?.authEnabled ? handleLogout : undefined}
         isOpen={isMobileMenuOpen}
@@ -190,9 +236,9 @@ export const App: React.FC = () => {
             </button>
             <div className="flex items-center gap-2">
               <img
-                src="/Corvus.png"
+                src="/logo_transparent.png"
                 alt="Corvus"
-                className="w-7 h-7 object-contain rounded"
+                className="w-7 h-7 object-contain"
                 onError={(e) => {
                   (e.target as HTMLElement).style.display = 'none';
                 }}

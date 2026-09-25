@@ -12,11 +12,11 @@ public class DockerServiceTests
         public Task<bool> PingAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
         public Task<DockerVersionInfo?> GetVersionAsync(CancellationToken cancellationToken = default) => Task.FromResult<DockerVersionInfo?>(new DockerVersionInfo { Version = "27.0.0" });
         public Task<List<DockerContainerInfo>> ListContainersAsync(bool all = true, CancellationToken cancellationToken = default) => Task.FromResult(new List<DockerContainerInfo>());
-        public Task<bool> RestartContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> StartContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> StopContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<DockerActionResult> RestartContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(true, "Yeniden başlatıldı."));
+        public Task<DockerActionResult> StartContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(true, "Başlatıldı."));
+        public Task<DockerActionResult> StopContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(true, "Durduruldu."));
+        public Task<DockerActionResult> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(true, "Duraklatıldı."));
+        public Task<DockerActionResult> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(true, "Devam ettirildi."));
         public Task<ContainerStatsDto?> GetContainerStatsAsync(string containerId, CancellationToken cancellationToken = default) =>
             Task.FromResult<ContainerStatsDto?>(new ContainerStatsDto(containerId, 12.5, 104857600, 1073741824, 9.77, 2048, 4096));
         public Task<List<string>> GetContainerLogsAsync(string containerId, int tail = 100, CancellationToken cancellationToken = default) => Task.FromResult(new List<string> { "log line 1", "log line 2" });
@@ -78,6 +78,79 @@ public class DockerServiceTests
         Assert.Equal("healthy", service.Status);
     }
 
+    [Fact]
+    public void MapContainerToService_ExtractsDomainFromTraefikLabel()
+    {
+        var dockerService = new DockerService(new FakeDockerHttpClient(), NullLogger<DockerService>.Instance);
+
+        var container = new DockerContainerInfo
+        {
+            Id = "traefik123456",
+            Names = new List<string> { "/whoami" },
+            State = "running",
+            Labels = new Dictionary<string, string>
+            {
+                ["traefik.http.routers.whoami.rule"] = "Host(`whoami.local.domain`)"
+            }
+        };
+
+        var service = dockerService.MapContainerToService(container);
+
+        Assert.Equal("https://whoami.local.domain", service.Url);
+        Assert.Equal("Container'lar", service.Category);
+    }
+
+    [Fact]
+    public void MapContainerToService_ExtractsDomainAndCategoryFromCaddyAndCompose()
+    {
+        var dockerService = new DockerService(new FakeDockerHttpClient(), NullLogger<DockerService>.Instance);
+
+        var container = new DockerContainerInfo
+        {
+            Id = "caddy123456",
+            Names = new List<string> { "/grafana" },
+            State = "running",
+            Labels = new Dictionary<string, string>
+            {
+                ["caddy"] = "grafana.homelab.lan",
+                ["com.docker.compose.project"] = "monitoring"
+            }
+        };
+
+        var service = dockerService.MapContainerToService(container);
+
+        Assert.Equal("https://grafana.homelab.lan", service.Url);
+        Assert.Equal("Monitoring", service.Category);
+    }
+
+    [Fact]
+    public void MapContainerToService_UsesCorvusPublicHost_WhenSet()
+    {
+        var dockerService = new DockerService(new FakeDockerHttpClient(), NullLogger<DockerService>.Instance);
+
+        Environment.SetEnvironmentVariable("CORVUS_PUBLIC_HOST", "192.168.1.100");
+        try
+        {
+            var container = new DockerContainerInfo
+            {
+                Id = "host123456",
+                Names = new List<string> { "/portainer" },
+                State = "running",
+                Ports = new List<DockerPortInfo>
+                {
+                    new DockerPortInfo { IP = "0.0.0.0", PrivatePort = 9000, PublicPort = 9000, Type = "tcp" }
+                }
+            };
+
+            var service = dockerService.MapContainerToService(container);
+            Assert.Equal("http://192.168.1.100:9000", service.Url);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CORVUS_PUBLIC_HOST", null);
+        }
+    }
+
     [Theory]
     [InlineData("running", "healthy")]
     [InlineData("restarting", "degraded")]
@@ -135,15 +208,41 @@ public class DockerServiceTests
     {
         var dockerService = new DockerService(new FakeDockerHttpClient(), NullLogger<DockerService>.Instance);
 
-        bool started = await dockerService.StartContainerAsync("c1");
-        bool stopped = await dockerService.StopContainerAsync("c1");
-        bool paused = await dockerService.PauseContainerAsync("c1");
-        bool unpaused = await dockerService.UnpauseContainerAsync("c1");
+        var started = await dockerService.StartContainerAsync("c1");
+        var stopped = await dockerService.StopContainerAsync("c1");
+        var paused = await dockerService.PauseContainerAsync("c1");
+        var unpaused = await dockerService.UnpauseContainerAsync("c1");
 
-        Assert.True(started);
-        Assert.True(stopped);
-        Assert.True(paused);
-        Assert.True(unpaused);
+        Assert.True(started.Success);
+        Assert.True(stopped.Success);
+        Assert.True(paused.Success);
+        Assert.True(unpaused.Success);
+    }
+
+    [Fact]
+    public async Task ContainerLifecycleMethods_ReturnsError_WhenDockerFails()
+    {
+        var failingClient = new FailingDockerHttpClient();
+        var dockerService = new DockerService(failingClient, NullLogger<DockerService>.Instance);
+
+        var started = await dockerService.StartContainerAsync("c1");
+        Assert.False(started.Success);
+        Assert.Equal("Port 80 is already allocated", started.Message);
+        Assert.Equal(500, started.StatusCode);
+    }
+
+    private class FailingDockerHttpClient : IDockerHttpClient
+    {
+        public Task<bool> PingAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<DockerVersionInfo?> GetVersionAsync(CancellationToken cancellationToken = default) => Task.FromResult<DockerVersionInfo?>(null);
+        public Task<List<DockerContainerInfo>> ListContainersAsync(bool all = true, CancellationToken cancellationToken = default) => Task.FromResult(new List<DockerContainerInfo>());
+        public Task<DockerActionResult> RestartContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(false, "Restart failed", 500));
+        public Task<DockerActionResult> StartContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(false, "Port 80 is already allocated", 500));
+        public Task<DockerActionResult> StopContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(false, "Stop failed", 500));
+        public Task<DockerActionResult> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(false, "Pause failed", 500));
+        public Task<DockerActionResult> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(false, "Unpause failed", 500));
+        public Task<ContainerStatsDto?> GetContainerStatsAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult<ContainerStatsDto?>(null);
+        public Task<List<string>> GetContainerLogsAsync(string containerId, int tail = 100, CancellationToken cancellationToken = default) => Task.FromResult(new List<string>());
     }
 
     [Fact]

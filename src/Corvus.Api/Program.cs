@@ -100,6 +100,9 @@ app.MapUptimeEndpoints();
 app.MapPushEndpoints();
 app.MapAuthEndpoints();
 app.MapDashboardEndpoints();
+app.MapSettingsEndpoints();
+app.MapBackupEndpoints();
+app.MapStatusPageEndpoints();
 app.MapNotificationEndpoints();
 app.MapStreamEndpoints();
 

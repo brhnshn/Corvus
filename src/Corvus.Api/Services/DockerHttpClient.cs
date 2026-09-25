@@ -11,11 +11,11 @@ public interface IDockerHttpClient
     Task<bool> PingAsync(CancellationToken cancellationToken = default);
     Task<DockerVersionInfo?> GetVersionAsync(CancellationToken cancellationToken = default);
     Task<List<DockerContainerInfo>> ListContainersAsync(bool all = true, CancellationToken cancellationToken = default);
-    Task<bool> RestartContainerAsync(string containerId, CancellationToken cancellationToken = default);
-    Task<bool> StartContainerAsync(string containerId, CancellationToken cancellationToken = default);
-    Task<bool> StopContainerAsync(string containerId, CancellationToken cancellationToken = default);
-    Task<bool> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default);
-    Task<bool> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<DockerActionResult> RestartContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<DockerActionResult> StartContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<DockerActionResult> StopContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<DockerActionResult> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<DockerActionResult> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default);
     Task<ContainerStatsDto?> GetContainerStatsAsync(string containerId, CancellationToken cancellationToken = default);
     Task<List<string>> GetContainerLogsAsync(string containerId, int tail = 100, CancellationToken cancellationToken = default);
 }
@@ -138,73 +138,140 @@ public class DockerHttpClient : IDockerHttpClient, IDisposable
         }
     }
 
-    public async Task<bool> RestartContainerAsync(string containerId, CancellationToken cancellationToken = default)
+    private static async Task<string> ExtractDockerErrorMessageAsync(HttpResponseMessage response, string defaultMessage)
+    {
+        try
+        {
+            var content = await response.Content.ReadAsStringAsync();
+            if (!string.IsNullOrWhiteSpace(content))
+            {
+                using var doc = JsonDocument.Parse(content);
+                if (doc.RootElement.TryGetProperty("message", out var msgProp) && !string.IsNullOrWhiteSpace(msgProp.GetString()))
+                {
+                    return msgProp.GetString()!;
+                }
+            }
+        }
+        catch
+        {
+            // json parse edilemezse default dön
+        }
+
+        return defaultMessage;
+    }
+
+    public async Task<DockerActionResult> RestartContainerAsync(string containerId, CancellationToken cancellationToken = default)
     {
         try
         {
             var response = await _httpClient.PostAsync($"/containers/{containerId}/restart", null, cancellationToken);
-            return response.IsSuccessStatusCode;
+            if (response.IsSuccessStatusCode)
+            {
+                return new DockerActionResult(true, "Container yeniden başlatıldı.");
+            }
+
+            string error = await ExtractDockerErrorMessageAsync(response, "Container yeniden başlatılamadı.");
+            _logger.LogWarning("Docker restart hatası ({StatusCode}): {ContainerId} - {Error}", response.StatusCode, containerId, error);
+            return new DockerActionResult(false, error, (int)response.StatusCode);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Container yeniden başlatılamadı: {ContainerId}", containerId);
-            return false;
+            return new DockerActionResult(false, $"Docker bağlantı hatası: {ex.Message}", 500);
         }
     }
 
-    public async Task<bool> StartContainerAsync(string containerId, CancellationToken cancellationToken = default)
+    public async Task<DockerActionResult> StartContainerAsync(string containerId, CancellationToken cancellationToken = default)
     {
         try
         {
             var response = await _httpClient.PostAsync($"/containers/{containerId}/start", null, cancellationToken);
-            return response.IsSuccessStatusCode;
+            if (response.IsSuccessStatusCode)
+            {
+                return new DockerActionResult(true, "Container başlatıldı.");
+            }
+
+            if (response.StatusCode == System.Net.HttpStatusCode.NotModified)
+            {
+                return new DockerActionResult(true, "Container zaten çalışıyor.", 200);
+            }
+
+            string error = await ExtractDockerErrorMessageAsync(response, "Container başlatılamadı.");
+            _logger.LogWarning("Docker start hatası ({StatusCode}): {ContainerId} - {Error}", response.StatusCode, containerId, error);
+            return new DockerActionResult(false, error, (int)response.StatusCode);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Container başlatılamadı: {ContainerId}", containerId);
-            return false;
+            return new DockerActionResult(false, $"Docker bağlantı hatası: {ex.Message}", 500);
         }
     }
 
-    public async Task<bool> StopContainerAsync(string containerId, CancellationToken cancellationToken = default)
+    public async Task<DockerActionResult> StopContainerAsync(string containerId, CancellationToken cancellationToken = default)
     {
         try
         {
             var response = await _httpClient.PostAsync($"/containers/{containerId}/stop", null, cancellationToken);
-            return response.IsSuccessStatusCode;
+            if (response.IsSuccessStatusCode)
+            {
+                return new DockerActionResult(true, "Container durduruldu.");
+            }
+
+            if (response.StatusCode == System.Net.HttpStatusCode.NotModified)
+            {
+                return new DockerActionResult(true, "Container zaten durdurulmuş.", 200);
+            }
+
+            string error = await ExtractDockerErrorMessageAsync(response, "Container durdurulamadı.");
+            _logger.LogWarning("Docker stop hatası ({StatusCode}): {ContainerId} - {Error}", response.StatusCode, containerId, error);
+            return new DockerActionResult(false, error, (int)response.StatusCode);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Container durdurulamadı: {ContainerId}", containerId);
-            return false;
+            return new DockerActionResult(false, $"Docker bağlantı hatası: {ex.Message}", 500);
         }
     }
 
-    public async Task<bool> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default)
+    public async Task<DockerActionResult> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default)
     {
         try
         {
             var response = await _httpClient.PostAsync($"/containers/{containerId}/pause", null, cancellationToken);
-            return response.IsSuccessStatusCode;
+            if (response.IsSuccessStatusCode)
+            {
+                return new DockerActionResult(true, "Container duraklatıldı.");
+            }
+
+            string error = await ExtractDockerErrorMessageAsync(response, "Container duraklatılamadı.");
+            _logger.LogWarning("Docker pause hatası ({StatusCode}): {ContainerId} - {Error}", response.StatusCode, containerId, error);
+            return new DockerActionResult(false, error, (int)response.StatusCode);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Container duraklatılamadı: {ContainerId}", containerId);
-            return false;
+            return new DockerActionResult(false, $"Docker bağlantı hatası: {ex.Message}", 500);
         }
     }
 
-    public async Task<bool> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default)
+    public async Task<DockerActionResult> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default)
     {
         try
         {
             var response = await _httpClient.PostAsync($"/containers/{containerId}/unpause", null, cancellationToken);
-            return response.IsSuccessStatusCode;
+            if (response.IsSuccessStatusCode)
+            {
+                return new DockerActionResult(true, "Container devam ettirildi.");
+            }
+
+            string error = await ExtractDockerErrorMessageAsync(response, "Container devam ettirilemedi.");
+            _logger.LogWarning("Docker unpause hatası ({StatusCode}): {ContainerId} - {Error}", response.StatusCode, containerId, error);
+            return new DockerActionResult(false, error, (int)response.StatusCode);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Container devam ettirilemedi: {ContainerId}", containerId);
-            return false;
+            return new DockerActionResult(false, $"Docker bağlantı hatası: {ex.Message}", 500);
         }
     }
 

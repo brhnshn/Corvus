@@ -18,6 +18,15 @@ public class NotificationServiceTests
             _dict[key] = value;
             return Task.CompletedTask;
         }
+
+        public Task SetBatchAsync(Dictionary<string, string> settings)
+        {
+            foreach (var (k, v) in settings)
+            {
+                _dict[k] = v;
+            }
+            return Task.CompletedTask;
+        }
     }
 
     private class FakeHttpClientFactory : IHttpClientFactory

@@ -233,4 +233,4 @@ Push monitor üzerinden gelen son yedekleme sinyalleri.
 - [x] Derleme anında tip korumalı çift dilli i18n sistemi (İngilizce varsayılan, Türkçe tam destek)
 - [x] Çift yönlü yedekleme yönetimi: Tek tıkla kilitlenmesiz SQLite anlık yedek indirme (`GET /api/backup/download`), SSE canlı Dashboard güncellemesi ve harici push entegrasyonu
 - [x] Esnek veri saklama süresi ve disk telemetrisi: Hazır periyotlar, Sınırsız mod, risk uyarısı, canlı DB boyutu ve dinamik `RetentionCleanupService`
-- [x] 60/60 xUnit birim ve entegrasyon testi doğrulaması
+- [x] 64/64 xUnit birim ve entegrasyon testi doğrulaması

@@ -55,12 +55,19 @@ public class DatabaseMigrationAndRepositoryTests : IDisposable
         Assert.True(created.IsPublic);
         Assert.Equal("http", created.CheckType);
 
-        // 2. Update SSL Info
+        // 2. Update SSL Info & Status
         await repo.UpdateSslInfoAsync(created.Id, 25, "Let's Encrypt Authority");
+        await repo.UpdateStatusAsync(created.Id, "down");
         var fetched = await repo.GetByIdAsync(created.Id);
         Assert.NotNull(fetched);
         Assert.Equal(25, fetched.SslExpiryDays);
         Assert.Equal("Let's Encrypt Authority", fetched.SslIssuer);
+        Assert.Equal("down", fetched.Status);
+
+        await repo.UpdateStatusAsync(created.Id, "healthy");
+        var fetchedUp = await repo.GetByIdAsync(created.Id);
+        Assert.NotNull(fetchedUp);
+        Assert.Equal("healthy", fetchedUp.Status);
 
         // 3. Test Public Services query
         var publicList = await repo.GetPublicServicesAsync();

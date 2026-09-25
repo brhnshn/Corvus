@@ -16,6 +16,7 @@ public interface IServicesRepository
     Task ReorderAsync(List<string> orderedServiceIds);
     Task<List<Service>> GetPublicServicesAsync();
     Task UpdateSslInfoAsync(string serviceId, int sslExpiryDays, string? sslIssuer);
+    Task UpdateStatusAsync(string id, string status);
 }
 
 public class ServicesRepository : IServicesRepository
@@ -238,11 +239,13 @@ public class ServicesRepository : IServicesRepository
 
     public async Task ReorderAsync(List<string> orderedServiceIds)
     {
-        using var conn = _db.CreateConnection();
+        using var conn = (Microsoft.Data.Sqlite.SqliteConnection)_db.CreateConnection();
+        using var tx = conn.BeginTransaction();
         for (int i = 0; i < orderedServiceIds.Count; i++)
         {
-            await conn.ExecuteAsync("UPDATE services SET display_order = @order WHERE id = @id", new { order = i, id = orderedServiceIds[i] });
+            await conn.ExecuteAsync("UPDATE services SET display_order = @order WHERE id = @id", new { order = i, id = orderedServiceIds[i] }, tx);
         }
+        tx.Commit();
     }
 
     public async Task UpdateSslInfoAsync(string serviceId, int sslExpiryDays, string? sslIssuer)
@@ -338,5 +341,15 @@ public class ServicesRepository : IServicesRepository
         }
 
         tx.Commit();
+    }
+
+    public async Task UpdateStatusAsync(string id, string status)
+    {
+        using var conn = _db.CreateConnection();
+        var sql = @"
+            UPDATE services 
+            SET status = @status, updated_at = @now
+            WHERE id = @id";
+        await conn.ExecuteAsync(sql, new { id, status, now = DateTime.UtcNow.ToString("o") });
     }
 }

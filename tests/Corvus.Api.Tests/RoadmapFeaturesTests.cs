@@ -234,6 +234,7 @@ public class RoadmapFeaturesTests
     {
         public Task<string?> GetAsync(string key) => Task.FromResult<string?>(null);
         public Task SetAsync(string key, string value) => Task.CompletedTask;
+        public Task SetBatchAsync(Dictionary<string, string> settings) => Task.CompletedTask;
         public Task<Dictionary<string, string>> GetAllAsync() => Task.FromResult(new Dictionary<string, string>());
     }
 }

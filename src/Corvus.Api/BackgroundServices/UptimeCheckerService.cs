@@ -12,7 +12,8 @@ public class UptimeCheckerService : BackgroundService
     private readonly IServiceProvider _services;
     private readonly ILogger<UptimeCheckerService> _logger;
     private readonly IEventBroadcaster _eventBroadcaster;
-    private readonly ConcurrentDictionary<string, string> _lastKnownStatus = new();
+    private readonly ConcurrentDictionary<string, int> _consecutiveFailures = new();
+    private readonly ConcurrentDictionary<string, bool> _alertedDown = new();
     private static readonly HttpRequestOptionsKey<SslInfoHolder> SslInfoKey = new("Corvus_SslInfo");
     private readonly HttpClient _httpClient;
 
@@ -60,128 +61,65 @@ public class UptimeCheckerService : BackgroundService
                 var uptimeRepo = scope.ServiceProvider.GetRequiredService<IUptimeRepository>();
                 var notifService = scope.ServiceProvider.GetRequiredService<INotificationService>();
                 var pushRepo = scope.ServiceProvider.GetRequiredService<IPushMonitorRepository>();
+                var settingsRepo = scope.ServiceProvider.GetRequiredService<ISettingsRepository>();
+
+                // Bildirim eşiği (varsayılan: 2 ardışık kontrol hatası)
+                int alertThreshold = 2;
+                var thresholdSetting = await settingsRepo.GetAsync("uptime_alert_threshold");
+                if (int.TryParse(thresholdSetting, out var parsedThreshold) && parsedThreshold >= 1)
+                {
+                    alertThreshold = parsedThreshold;
+                }
 
                 var allServices = await servicesRepo.GetAllAsync();
 
-                foreach (var s in allServices)
+                var checkTasks = allServices.Select(s => CheckSingleServiceAsync(s, stoppingToken));
+                var checkResults = await Task.WhenAll(checkTasks);
+
+                foreach (var (s, check, sslHolder) in checkResults)
                 {
-                    string? targetUrl = !string.IsNullOrWhiteSpace(s.HealthCheckUrl) ? s.HealthCheckUrl : s.Url;
-                    bool isTcp = string.Equals(s.CheckType, "tcp", StringComparison.OrdinalIgnoreCase) ||
-                                (!string.IsNullOrWhiteSpace(targetUrl) && targetUrl.StartsWith("tcp://", StringComparison.OrdinalIgnoreCase));
+                    if (check == null) continue;
 
-                    if (string.IsNullOrWhiteSpace(targetUrl) && !isTcp)
+                    if (sslHolder?.SslDays.HasValue == true)
                     {
-                        continue;
-                    }
-
-                    var check = new UptimeCheck
-                    {
-                        ServiceId = s.Id,
-                        CheckedAt = DateTime.UtcNow.ToString("o")
-                    };
-
-                    var sw = Stopwatch.StartNew();
-
-                    if (isTcp)
-                    {
-                        // 1.4: TCP Port Ping Check
-                        string host = "localhost";
-                        int port = s.Port ?? 80;
-
-                        if (!string.IsNullOrWhiteSpace(targetUrl))
+                        await servicesRepo.UpdateSslInfoAsync(s.Id, sslHolder.SslDays.Value, sslHolder.SslIssuer);
+                        if (sslHolder.SslDays.Value <= 14)
                         {
-                            try
-                            {
-                                var cleanUrl = targetUrl.StartsWith("tcp://", StringComparison.OrdinalIgnoreCase)
-                                    ? targetUrl.Replace("tcp://", "http://", StringComparison.OrdinalIgnoreCase)
-                                    : (targetUrl.Contains("://") ? targetUrl : $"http://{targetUrl}");
-                                var uri = new Uri(cleanUrl);
-                                host = uri.Host;
-                                if (uri.Port > 0) port = uri.Port;
-                            }
-                            catch
-                            {
-                                host = targetUrl.Split(':')[0];
-                            }
-                        }
-
-                        try
-                        {
-                            using var tcp = new TcpClient();
-                            using var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-                            cts.CancelAfter(TimeSpan.FromSeconds(5));
-                            await tcp.ConnectAsync(host, port, cts.Token);
-                            sw.Stop();
-                            check.ResponseTimeMs = (int)sw.ElapsedMilliseconds;
-                            check.Status = "up";
-                        }
-                        catch (Exception ex)
-                        {
-                            sw.Stop();
-                            check.ResponseTimeMs = (int)sw.ElapsedMilliseconds;
-                            check.Status = "down";
-                            check.ErrorMessage = $"TCP bağlantı hatası ({host}:{port}): {ex.Message}";
-                        }
-                    }
-                    else
-                    {
-                        // 1.4: HTTP / HTTPS Check & SSL Expiration Tracking
-                        var sslHolder = new SslInfoHolder();
-                        using var request = new HttpRequestMessage(HttpMethod.Get, targetUrl!);
-                        request.Options.Set(SslInfoKey, sslHolder);
-
-                        try
-                        {
-                            var response = await _httpClient.SendAsync(request, stoppingToken);
-                            sw.Stop();
-                            check.ResponseTimeMs = (int)sw.ElapsedMilliseconds;
-
-                            if (response.IsSuccessStatusCode)
-                            {
-                                check.Status = "up";
-                            }
-                            else
-                            {
-                                check.Status = "down";
-                                check.ErrorMessage = $"HTTP {(int)response.StatusCode}";
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            sw.Stop();
-                            check.ResponseTimeMs = (int)sw.ElapsedMilliseconds;
-                            check.Status = "down";
-                            check.ErrorMessage = ex.Message;
-                        }
-
-                        if (sslHolder.SslDays.HasValue)
-                        {
-                            await servicesRepo.UpdateSslInfoAsync(s.Id, sslHolder.SslDays.Value, sslHolder.SslIssuer);
-                            if (sslHolder.SslDays.Value <= 14)
-                            {
-                                _logger.LogWarning("SSL sertifikası yakında bitiyor: Servis {ServiceName}, Kalan Gün: {Days}", s.Name, sslHolder.SslDays.Value);
-                            }
+                            _logger.LogWarning("SSL sertifikası yakında bitiyor: Servis {ServiceName}, Kalan Gün: {Days}", s.Name, sslHolder.SslDays.Value);
                         }
                     }
 
                     await uptimeRepo.InsertAsync(check);
 
-                    // Durum değişimi tespiti ve bildirim fırlatma
-                    if (_lastKnownStatus.TryGetValue(s.Id, out var previousStatus))
+                    string? targetUrl = !string.IsNullOrWhiteSpace(s.HealthCheckUrl) ? s.HealthCheckUrl : s.Url;
+
+                    if (check.Status == "down")
                     {
-                        if (previousStatus == "up" && check.Status == "down")
+                        _consecutiveFailures.AddOrUpdate(s.Id, 1, (_, count) => count + 1);
+                        int failures = _consecutiveFailures[s.Id];
+
+                        // Eşik değerine ulaşıldıysa ve henüz alarm gönderilmediyse bildirim fırlat
+                        if (failures >= alertThreshold && _alertedDown.TryAdd(s.Id, true))
                         {
                             _ = notifService.DispatchServiceAlertAsync(s.Name, targetUrl ?? $"Port:{s.Port}", isDown: true, check.ErrorMessage, stoppingToken);
                             _eventBroadcaster.Broadcast("service_status_changed", $"{{\"id\":\"{s.Id}\",\"status\":\"down\"}}");
                         }
-                        else if (previousStatus == "down" && check.Status == "up")
+
+                        await servicesRepo.UpdateStatusAsync(s.Id, "down");
+                    }
+                    else if (check.Status == "up")
+                    {
+                        _consecutiveFailures[s.Id] = 0;
+
+                        // Önceden kesinti bildirimi gönderilmişse kurtarıldı bildirimi gönder
+                        if (_alertedDown.TryRemove(s.Id, out _))
                         {
                             _ = notifService.DispatchServiceAlertAsync(s.Name, targetUrl ?? $"Port:{s.Port}", isDown: false, null, stoppingToken);
-                            _eventBroadcaster.Broadcast("service_status_changed", $"{{\"id\":\"{s.Id}\",\"status\":\"healthy\"}}");
                         }
-                    }
 
-                    _lastKnownStatus[s.Id] = check.Status;
+                        _eventBroadcaster.Broadcast("service_status_changed", $"{{\"id\":\"{s.Id}\",\"status\":\"healthy\"}}");
+                        await servicesRepo.UpdateStatusAsync(s.Id, "healthy");
+                    }
                 }
 
                 // 1.5: Dead Man's Snitch — Beklenen Periyot Kontrolü
@@ -227,6 +165,151 @@ public class UptimeCheckerService : BackgroundService
         }
 
         _logger.LogInformation("UptimeCheckerService durduruldu.");
+    }
+
+    private static string NormalizeHttpUrl(string url)
+    {
+        var trimmed = url.Trim();
+        if (!trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"http://{trimmed}";
+        }
+        return trimmed;
+    }
+
+    private async Task<(Service Service, UptimeCheck? Check, SslInfoHolder? Ssl)> CheckSingleServiceAsync(Service s, CancellationToken ct)
+    {
+        string? targetUrl = !string.IsNullOrWhiteSpace(s.HealthCheckUrl) ? s.HealthCheckUrl : s.Url;
+        bool isTcp = string.Equals(s.CheckType, "tcp", StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrWhiteSpace(targetUrl) && targetUrl.StartsWith("tcp://", StringComparison.OrdinalIgnoreCase));
+
+        if (string.IsNullOrWhiteSpace(targetUrl) && !isTcp)
+        {
+            return (s, null, null);
+        }
+
+        var check = new UptimeCheck
+        {
+            ServiceId = s.Id,
+            CheckedAt = DateTime.UtcNow.ToString("o")
+        };
+
+        var sw = Stopwatch.StartNew();
+        SslInfoHolder? sslHolder = null;
+
+        if (isTcp)
+        {
+            string host = "localhost";
+            int port = s.Port ?? 80;
+
+            if (!string.IsNullOrWhiteSpace(targetUrl))
+            {
+                try
+                {
+                    var cleanUrl = targetUrl.StartsWith("tcp://", StringComparison.OrdinalIgnoreCase)
+                        ? targetUrl.Replace("tcp://", "http://", StringComparison.OrdinalIgnoreCase)
+                        : (targetUrl.Contains("://") ? targetUrl : $"http://{targetUrl}");
+                    var uri = new Uri(cleanUrl);
+                    host = uri.Host;
+                    if (uri.Port > 0) port = uri.Port;
+                }
+                catch
+                {
+                    host = targetUrl.Split(':')[0];
+                }
+            }
+
+            async Task<Exception?> TryConnectTcpAsync()
+            {
+                try
+                {
+                    using var tcp = new TcpClient();
+                    using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    cts.CancelAfter(TimeSpan.FromSeconds(5));
+                    await tcp.ConnectAsync(host, port, cts.Token);
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    return ex;
+                }
+            }
+
+            var tcpEx = await TryConnectTcpAsync();
+            if (tcpEx != null && !ct.IsCancellationRequested)
+            {
+                // Hızlı tekrar deneme: Geçici aksamalarda 2 saniye sonra 1 kez daha dene
+                try { await Task.Delay(2000, ct); } catch (OperationCanceledException) { }
+                if (!ct.IsCancellationRequested)
+                {
+                    tcpEx = await TryConnectTcpAsync();
+                }
+            }
+
+            sw.Stop();
+            check.ResponseTimeMs = (int)sw.ElapsedMilliseconds;
+
+            if (tcpEx == null)
+            {
+                check.Status = "up";
+            }
+            else
+            {
+                check.Status = "down";
+                check.ErrorMessage = $"TCP bağlantı hatası ({host}:{port}): {tcpEx.Message}";
+            }
+        }
+        else
+        {
+            targetUrl = NormalizeHttpUrl(targetUrl!);
+            sslHolder = new SslInfoHolder();
+
+            async Task<(bool Ok, string? Error)> TrySendHttpAsync()
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, targetUrl);
+                request.Options.Set(SslInfoKey, sslHolder);
+                try
+                {
+                    var response = await _httpClient.SendAsync(request, ct);
+                    if (response.IsSuccessStatusCode)
+                    {
+                        return (true, null);
+                    }
+                    return (false, $"HTTP {(int)response.StatusCode}");
+                }
+                catch (Exception ex)
+                {
+                    return (false, ex.Message);
+                }
+            }
+
+            var httpResult = await TrySendHttpAsync();
+            if (!httpResult.Ok && !ct.IsCancellationRequested)
+            {
+                // Hızlı tekrar deneme: 2 saniye sonra 1 kez daha dene
+                try { await Task.Delay(2000, ct); } catch (OperationCanceledException) { }
+                if (!ct.IsCancellationRequested)
+                {
+                    httpResult = await TrySendHttpAsync();
+                }
+            }
+
+            sw.Stop();
+            check.ResponseTimeMs = (int)sw.ElapsedMilliseconds;
+
+            if (httpResult.Ok)
+            {
+                check.Status = "up";
+            }
+            else
+            {
+                check.Status = "down";
+                check.ErrorMessage = httpResult.Error ?? "Bilinmeyen HTTP hatası";
+            }
+        }
+
+        return (s, check, sslHolder);
     }
 
     public override void Dispose()

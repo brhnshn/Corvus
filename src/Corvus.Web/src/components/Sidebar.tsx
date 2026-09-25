@@ -8,8 +8,7 @@ import {
   Settings, 
   User as UserIcon, 
   LogOut,
-  X,
-  Globe 
+  X
 } from 'lucide-react';
 import { api, type VersionInfo } from '../api/client';
 import { useI18n } from '../i18n';
@@ -86,17 +85,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="h-16 flex items-center justify-between px-5 border-b border-[#2a2e3f]">
           <div className="flex items-center gap-3">
             <img 
-              src="/Corvus.png" 
+              src="/logo_transparent.png" 
               alt="Corvus" 
-              className="w-10 h-10 object-contain shrink-0 rounded-md"
+              className="w-9 h-9 object-contain shrink-0"
               onError={(e) => {
                 (e.target as HTMLElement).style.display = 'none';
               }}
             />
-            <div className="flex flex-col">
-              <span className="font-bold text-lg tracking-wider text-[#e5e7eb] leading-tight">CORVUS</span>
-              <span className="text-[10px] text-[#9ca3af] uppercase tracking-widest font-mono">System Monitor</span>
-            </div>
+            <span className="font-bold text-lg tracking-wider text-[#e5e7eb] leading-tight">CORVUS</span>
           </div>
 
           {/* Mobil & Tablet Kapatma Butonu */}
@@ -140,10 +136,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               rel="noopener noreferrer"
               className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-[#9ca3af] hover:text-[#e5e7eb] hover:bg-[#1e2130] transition-colors"
             >
-              <div className="flex items-center gap-3">
-                <Globe className="w-4 h-4 shrink-0 text-cyan-400" />
-                <span>{t('nav.liveStatus')}</span>
-              </div>
+              <span>{t('nav.liveStatus')}</span>
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#0f1117] border border-[#2a2e3f] text-slate-400 font-mono">/status</span>
             </a>
           </div>
