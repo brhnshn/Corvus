@@ -66,6 +66,12 @@ public static class ContainersEndpoints
                                statusCode: result.StatusCode == 200 ? 400 : result.StatusCode);
         });
 
+        group.MapGet("/stats-summary", async (IDockerService docker, CancellationToken ct) =>
+        {
+            var summary = await docker.GetActiveContainersStatsSummaryAsync(ct);
+            return Results.Ok(summary);
+        });
+
         group.MapGet("/{id}/stats", async (string id, IDockerService docker, CancellationToken ct) =>
         {
             var stats = await docker.GetContainerStatsAsync(id, ct);

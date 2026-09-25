@@ -14,6 +14,7 @@ public interface IDockerService
     Task<DockerActionResult> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default);
     Task<DockerActionResult> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default);
     Task<ContainerStatsDto?> GetContainerStatsAsync(string containerId, CancellationToken cancellationToken = default);
+    Task<Dictionary<string, ContainerStatsDto>> GetActiveContainersStatsSummaryAsync(CancellationToken cancellationToken = default);
     Task<List<string>> GetContainerLogsAsync(string containerId, int tail = 100, CancellationToken cancellationToken = default);
     bool ShouldIgnoreContainer(DockerContainerInfo container);
     Service MapContainerToService(DockerContainerInfo container);
@@ -24,6 +25,8 @@ public class DockerService : IDockerService
     private readonly IDockerHttpClient _client;
     private readonly ILogger<DockerService> _logger;
     private readonly ConcurrentDictionary<string, (DateTime Expiry, ContainerStatsDto Stats)> _statsCache = new();
+    private (DateTime Expiry, List<DockerContainerInfo> Items) _cachedContainers;
+    private readonly object _containersLock = new();
 
     public DockerService(IDockerHttpClient client, ILogger<DockerService> logger)
     {
@@ -37,23 +40,67 @@ public class DockerService : IDockerService
     public Task<DockerVersionInfo?> GetVersionAsync(CancellationToken cancellationToken = default) =>
         _client.GetVersionAsync(cancellationToken);
 
-    public Task<List<DockerContainerInfo>> GetContainersAsync(CancellationToken cancellationToken = default) =>
-        _client.ListContainersAsync(all: true, cancellationToken);
+    public async Task<List<DockerContainerInfo>> GetContainersAsync(CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        lock (_containersLock)
+        {
+            if (_cachedContainers.Items != null && now < _cachedContainers.Expiry)
+            {
+                return _cachedContainers.Items;
+            }
+        }
 
-    public Task<DockerActionResult> RestartContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
-        _client.RestartContainerAsync(containerId, cancellationToken);
+        var list = await _client.ListContainersAsync(all: true, cancellationToken);
+        lock (_containersLock)
+        {
+            _cachedContainers = (now.AddSeconds(2.5), list);
+        }
+        return list;
+    }
 
-    public Task<DockerActionResult> StartContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
-        _client.StartContainerAsync(containerId, cancellationToken);
+    private void InvalidateContainersCache()
+    {
+        lock (_containersLock)
+        {
+            _cachedContainers = default;
+        }
+    }
 
-    public Task<DockerActionResult> StopContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
-        _client.StopContainerAsync(containerId, cancellationToken);
+    public async Task<DockerActionResult> RestartContainerAsync(string containerId, CancellationToken cancellationToken = default)
+    {
+        var res = await _client.RestartContainerAsync(containerId, cancellationToken);
+        if (res.Success) InvalidateContainersCache();
+        return res;
+    }
 
-    public Task<DockerActionResult> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
-        _client.PauseContainerAsync(containerId, cancellationToken);
+    public async Task<DockerActionResult> StartContainerAsync(string containerId, CancellationToken cancellationToken = default)
+    {
+        var res = await _client.StartContainerAsync(containerId, cancellationToken);
+        if (res.Success) InvalidateContainersCache();
+        return res;
+    }
 
-    public Task<DockerActionResult> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default) =>
-        _client.UnpauseContainerAsync(containerId, cancellationToken);
+    public async Task<DockerActionResult> StopContainerAsync(string containerId, CancellationToken cancellationToken = default)
+    {
+        var res = await _client.StopContainerAsync(containerId, cancellationToken);
+        if (res.Success) InvalidateContainersCache();
+        return res;
+    }
+
+    public async Task<DockerActionResult> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default)
+    {
+        var res = await _client.PauseContainerAsync(containerId, cancellationToken);
+        if (res.Success) InvalidateContainersCache();
+        return res;
+    }
+
+    public async Task<DockerActionResult> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default)
+    {
+        var res = await _client.UnpauseContainerAsync(containerId, cancellationToken);
+        if (res.Success) InvalidateContainersCache();
+        return res;
+    }
 
     public async Task<ContainerStatsDto?> GetContainerStatsAsync(string containerId, CancellationToken cancellationToken = default)
     {
@@ -81,6 +128,46 @@ public class DockerService : IDockerService
         }
 
         return stats;
+    }
+
+    public async Task<Dictionary<string, ContainerStatsDto>> GetActiveContainersStatsSummaryAsync(CancellationToken cancellationToken = default)
+    {
+        var containers = await GetContainersAsync(cancellationToken);
+        var running = containers.Where(c => string.Equals(c.State, "running", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        var result = new Dictionary<string, ContainerStatsDto>(StringComparer.OrdinalIgnoreCase);
+        if (running.Count == 0) return result;
+
+        var parallelOptions = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = Math.Min(4, Math.Max(1, Environment.ProcessorCount)),
+            CancellationToken = cancellationToken
+        };
+
+        var concurrentDict = new ConcurrentDictionary<string, ContainerStatsDto>(StringComparer.OrdinalIgnoreCase);
+
+        await Parallel.ForEachAsync(running, parallelOptions, async (container, ct) =>
+        {
+            try
+            {
+                var stats = await GetContainerStatsAsync(container.Id, ct);
+                if (stats != null)
+                {
+                    concurrentDict[container.Id] = stats;
+                }
+            }
+            catch
+            {
+                // Tekil stats hatası tüm toplu yanıtı engellemesin
+            }
+        });
+
+        foreach (var kvp in concurrentDict)
+        {
+            result[kvp.Key] = kvp.Value;
+        }
+
+        return result;
     }
 
     public Task<List<string>> GetContainerLogsAsync(string containerId, int tail = 100, CancellationToken cancellationToken = default) =>

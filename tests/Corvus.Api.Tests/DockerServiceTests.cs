@@ -9,17 +9,17 @@ public class DockerServiceTests
 {
     private class FakeDockerHttpClient : IDockerHttpClient
     {
-        public Task<bool> PingAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<DockerVersionInfo?> GetVersionAsync(CancellationToken cancellationToken = default) => Task.FromResult<DockerVersionInfo?>(new DockerVersionInfo { Version = "27.0.0" });
-        public Task<List<DockerContainerInfo>> ListContainersAsync(bool all = true, CancellationToken cancellationToken = default) => Task.FromResult(new List<DockerContainerInfo>());
-        public Task<DockerActionResult> RestartContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(true, "Yeniden başlatıldı."));
-        public Task<DockerActionResult> StartContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(true, "Başlatıldı."));
-        public Task<DockerActionResult> StopContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(true, "Durduruldu."));
-        public Task<DockerActionResult> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(true, "Duraklatıldı."));
-        public Task<DockerActionResult> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(true, "Devam ettirildi."));
-        public Task<ContainerStatsDto?> GetContainerStatsAsync(string containerId, CancellationToken cancellationToken = default) =>
+        public virtual Task<bool> PingAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public virtual Task<DockerVersionInfo?> GetVersionAsync(CancellationToken cancellationToken = default) => Task.FromResult<DockerVersionInfo?>(new DockerVersionInfo { Version = "27.0.0" });
+        public virtual Task<List<DockerContainerInfo>> ListContainersAsync(bool all = true, CancellationToken cancellationToken = default) => Task.FromResult(new List<DockerContainerInfo>());
+        public virtual Task<DockerActionResult> RestartContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(true, "Yeniden başlatıldı."));
+        public virtual Task<DockerActionResult> StartContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(true, "Başlatıldı."));
+        public virtual Task<DockerActionResult> StopContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(true, "Durduruldu."));
+        public virtual Task<DockerActionResult> PauseContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(true, "Duraklatıldı."));
+        public virtual Task<DockerActionResult> UnpauseContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.FromResult(new DockerActionResult(true, "Devam ettirildi."));
+        public virtual Task<ContainerStatsDto?> GetContainerStatsAsync(string containerId, CancellationToken cancellationToken = default) =>
             Task.FromResult<ContainerStatsDto?>(new ContainerStatsDto(containerId, 12.5, 104857600, 1073741824, 9.77, 2048, 4096));
-        public Task<List<string>> GetContainerLogsAsync(string containerId, int tail = 100, CancellationToken cancellationToken = default) => Task.FromResult(new List<string> { "log line 1", "log line 2" });
+        public virtual Task<List<string>> GetContainerLogsAsync(string containerId, int tail = 100, CancellationToken cancellationToken = default) => Task.FromResult(new List<string> { "log line 1", "log line 2" });
     }
 
     [Fact]
@@ -270,5 +270,60 @@ public class DockerServiceTests
         Assert.Equal(9.77, stats.MemoryPercent);
         Assert.Equal(2048, stats.NetworkRxBytes);
         Assert.Equal(4096, stats.NetworkTxBytes);
+    }
+
+    [Fact]
+    public async Task GetActiveContainersStatsSummary_ReturnsBatchStatsForRunningContainers()
+    {
+        var customClient = new BatchFakeDockerHttpClient();
+        var dockerService = new DockerService(customClient, NullLogger<DockerService>.Instance);
+
+        var summary = await dockerService.GetActiveContainersStatsSummaryAsync();
+
+        Assert.NotNull(summary);
+        Assert.Equal(2, summary.Count);
+        Assert.True(summary.ContainsKey("running-1"));
+        Assert.True(summary.ContainsKey("running-2"));
+        Assert.False(summary.ContainsKey("stopped-3"));
+    }
+
+    [Fact]
+    public async Task GetContainersAsync_CachesResultWithinTtl()
+    {
+        var customClient = new CountingDockerHttpClient();
+        var dockerService = new DockerService(customClient, NullLogger<DockerService>.Instance);
+
+        var first = await dockerService.GetContainersAsync();
+        var second = await dockerService.GetContainersAsync();
+
+        Assert.Equal(1, customClient.ListCallCount);
+        Assert.Same(first, second);
+    }
+
+    private class BatchFakeDockerHttpClient : FakeDockerHttpClient
+    {
+        public override Task<List<DockerContainerInfo>> ListContainersAsync(bool all = true, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new List<DockerContainerInfo>
+            {
+                new() { Id = "running-1", State = "running", Names = new List<string> { "/c1" } },
+                new() { Id = "running-2", State = "running", Names = new List<string> { "/c2" } },
+                new() { Id = "stopped-3", State = "exited", Names = new List<string> { "/c3" } }
+            });
+        }
+    }
+
+    private class CountingDockerHttpClient : FakeDockerHttpClient
+    {
+        public int ListCallCount { get; private set; }
+
+        public override Task<List<DockerContainerInfo>> ListContainersAsync(bool all = true, CancellationToken cancellationToken = default)
+        {
+            ListCallCount++;
+            return Task.FromResult(new List<DockerContainerInfo>
+            {
+                new() { Id = "c1", State = "running", Names = new List<string> { "/c1" } }
+            });
+        }
     }
 }

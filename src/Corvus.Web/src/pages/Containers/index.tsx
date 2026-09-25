@@ -18,20 +18,17 @@ export const ContainersPage: React.FC = () => {
   // Görünüm Modu: Düz Liste vs Gruplanmış Görünüm (Compose & Akıllı Gruplar)
   const [viewMode, setViewMode] = useState<'flat' | 'compose'>('compose');
 
-  // Çalışan container'lar için canlı stats sorgusunu arka planda eşzamanlı (paralel) işlet
+  // Çalışan container'lar için canlı stats özetini tek bir batch sorgu ile al
   const fetchStatsBackground = async (runningContainers: DockerContainer[]) => {
-    await Promise.allSettled(
-      runningContainers.map(async (c) => {
-        try {
-          const stats = await api.getContainerStats(c.Id);
-          if (stats) {
-            setStatsMap(prev => ({ ...prev, [c.Id]: stats }));
-          }
-        } catch {
-          // stats alınamazsa sessizce geç
-        }
-      })
-    );
+    if (runningContainers.length === 0) return;
+    try {
+      const summary = await api.getContainersStatsSummary();
+      if (summary) {
+        setStatsMap(summary);
+      }
+    } catch {
+      // stats alınamazsa sessizce geç
+    }
   };
 
   const loadContainers = async () => {

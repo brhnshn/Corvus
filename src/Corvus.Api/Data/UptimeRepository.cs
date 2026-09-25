@@ -14,6 +14,8 @@ public interface IUptimeRepository
 public class UptimeRepository : IUptimeRepository
 {
     private readonly IDbConnectionFactory _db;
+    private static (DateTime Expiry, Dictionary<string, double>? Dict) _uptimeCache;
+    private static readonly object _cacheLock = new();
 
     public UptimeRepository(IDbConnectionFactory db)
     {
@@ -56,7 +58,16 @@ public class UptimeRepository : IUptimeRepository
 
     public async Task<Dictionary<string, double>> Get24hUptimePercentagesAsync()
     {
-        string cutoff = DateTime.UtcNow.AddHours(-24).ToString("o");
+        var now = DateTime.UtcNow;
+        lock (_cacheLock)
+        {
+            if (_uptimeCache.Dict != null && now < _uptimeCache.Expiry)
+            {
+                return _uptimeCache.Dict;
+            }
+        }
+
+        string cutoff = now.AddHours(-24).ToString("o");
         using var conn = _db.CreateConnection();
         var sql = @"
             SELECT service_id AS ServiceId, 
@@ -75,6 +86,12 @@ public class UptimeRepository : IUptimeRepository
                 : 100.0;
             dict[r.ServiceId] = pct;
         }
+
+        lock (_cacheLock)
+        {
+            _uptimeCache = (DateTime.UtcNow.AddSeconds(5), dict);
+        }
+
         return dict;
     }
 

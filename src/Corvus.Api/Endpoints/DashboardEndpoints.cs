@@ -6,6 +6,9 @@ namespace Corvus.Api.Endpoints;
 
 public static class DashboardEndpoints
 {
+    private static (DateTime Expiry, DashboardSummaryDto? Summary) _cachedSummary;
+    private static readonly object _summaryLock = new();
+
     public static void MapDashboardEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/dashboard")
@@ -17,6 +20,15 @@ public static class DashboardEndpoints
             IBackupRepository backupRepo,
             IMetricsRepository metricsRepo) =>
         {
+            var now = DateTime.UtcNow;
+            lock (_summaryLock)
+            {
+                if (_cachedSummary.Summary != null && now < _cachedSummary.Expiry)
+                {
+                    return Results.Ok(_cachedSummary.Summary);
+                }
+            }
+
             var services = await servicesRepo.GetAllAsync();
             int totalServices = services.Count;
             int healthy = services.Count(s => s.Status == "healthy");
@@ -40,6 +52,11 @@ public static class DashboardEndpoints
                 lastBackup,
                 latestMetrics
             );
+
+            lock (_summaryLock)
+            {
+                _cachedSummary = (DateTime.UtcNow.AddSeconds(2.5), summary);
+            }
 
             return Results.Ok(summary);
         });

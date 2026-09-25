@@ -6,6 +6,9 @@ export const containersApi = {
 
   getContainerStats: (id: string) => fetchJson<ContainerStats>(`/containers/${id}/stats`),
 
+  getContainersStatsSummary: () =>
+    fetchCachedJson<Record<string, ContainerStats>>('/containers/stats-summary', undefined, 5000),
+
   restartContainer: async (id: string) => {
     const res = await fetchJson<{ success: boolean; message?: string }>(`/containers/${id}/restart`, {
       method: 'POST'

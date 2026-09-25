@@ -174,6 +174,7 @@ public record NotificationResult(
 [JsonSerializable(typeof(TestNotificationRequest))]
 [JsonSerializable(typeof(NotificationResult))]
 [JsonSerializable(typeof(ContainerStatsDto))]
+[JsonSerializable(typeof(Dictionary<string, ContainerStatsDto>))]
 [JsonSerializable(typeof(CreatePushMonitorRequest))]
 [JsonSerializable(typeof(UpdatePushMonitorRequest))]
 [JsonSerializable(typeof(ReorderServicesRequest))]
