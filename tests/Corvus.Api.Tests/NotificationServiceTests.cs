@@ -82,4 +82,23 @@ public class NotificationServiceTests
         Assert.False(result.Success);
         Assert.Contains("Desteklenmeyen bildirim kanalı", result.Message);
     }
+
+    [Theory]
+    [InlineData("http://127.0.0.1:8080/webhook")]
+    [InlineData("http://localhost/webhook")]
+    [InlineData("http://169.254.169.254/latest/meta-data")]
+    [InlineData("http://169.254.170.2/v2/metadata")]
+    [InlineData("http://[::1]:8080/webhook")]
+    [InlineData("http://[::ffff:127.0.0.1]:8080/webhook")]
+    [InlineData("ftp://evil.com/payload")]
+    [InlineData("file:///etc/passwd")]
+    public async Task TestChannelAsync_WithSsrfUrl_ReturnsFailure(string ssrfUrl)
+    {
+        var service = new NotificationService(new FakeSettingsRepository(), new FakeHttpClientFactory(), NullLogger<NotificationService>.Instance);
+
+        var result = await service.TestChannelAsync("discord", webhookUrl: ssrfUrl, botToken: null, chatId: null);
+
+        Assert.False(result.Success);
+        Assert.True(result.Message.Contains("SSRF") || result.Message.Contains("protokol") || result.Message.Contains("protocol"));
+    }
 }

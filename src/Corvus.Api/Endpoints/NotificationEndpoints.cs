@@ -7,7 +7,8 @@ public static class NotificationEndpoints
 {
     public static void MapNotificationEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/notifications");
+        var group = app.MapGroup("/api/notifications")
+            .AddEndpointFilter<CorvusAuthFilter>();
 
         group.MapPost("/test", async (TestNotificationRequest req, INotificationService notifService, CancellationToken ct) =>
         {

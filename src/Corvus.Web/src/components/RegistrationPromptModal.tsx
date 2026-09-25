@@ -25,8 +25,8 @@ export const RegistrationPromptModal: React.FC<RegistrationPromptModalProps> = (
       await api.toggleRegistration(false);
       onDisabled();
       onClose();
-    } catch (err: any) {
-      alert(`${t('common.error')}: ${err.message}`);
+    } catch (err: unknown) {
+      alert(`${t('common.error')}: ${err instanceof Error ? err.message : 'Error'}`);
     } finally {
       setLoading(false);
     }

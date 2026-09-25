@@ -14,8 +14,7 @@ import { useI18n } from '../../i18n';
 import { SystemPulseHero } from './SystemPulseHero';
 import { SystemKpiStrip } from './SystemKpiStrip';
 import { AttentionRequiredCard } from './AttentionRequiredCard';
-import { QuickServicesGrid } from './QuickServicesGrid';
-import { OperationsWidget } from './OperationsWidget';
+import { ActiveContainersWidget } from './ActiveContainersWidget';
 
 export interface DashboardPageProps {
   onNavigate?: (page: 'services' | 'containers' | 'metrics' | 'uptime' | 'settings') => void;
@@ -52,8 +51,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
       if (cntData.status === 'fulfilled') setContainers(cntData.value);
 
       setError(null);
-    } catch (err: any) {
-      setError(err.message || 'Veriler yüklenemedi');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Veriler yüklenemedi');
     } finally {
       setLoading(false);
       if (isManualRefresh) setRefreshing(false);
@@ -72,11 +71,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
     const onVisible = () => {
       if (!document.hidden) loadData();
     };
+    const onOnline = () => {
+      loadData();
+    };
+
     document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('online', onOnline);
 
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', onOnline);
     };
   }, []);
 
@@ -142,16 +147,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
         metrics={summary?.latestMetrics}
       />
 
-      {/* 4. Hızlı Servis Başlatıcı */}
-      <QuickServicesGrid
-        services={services}
-        onNavigate={onNavigate}
-      />
-
-      {/* 5. Operasyonlar & Cron Takibi */}
-      <OperationsWidget
-        lastBackup={summary?.lastBackup}
-        pushMonitors={pushMonitors}
+      {/* 4. Kompakt Aktif Konteynerler (Minimalist NOC Görünümü) */}
+      <ActiveContainersWidget
+        containers={containers}
         onNavigate={onNavigate}
       />
     </div>

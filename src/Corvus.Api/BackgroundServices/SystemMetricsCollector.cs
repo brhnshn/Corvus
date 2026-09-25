@@ -93,7 +93,7 @@ public class SystemMetricsCollector : BackgroundService
                 // Windows fallback
                 var gcMemory = GC.GetGCMemoryInfo();
                 ramTotalMb = gcMemory.TotalAvailableMemoryBytes / (1024 * 1024);
-                ramUsedMb = (gcMemory.TotalAvailableMemoryBytes - gcMemory.MemoryLoadBytes) / (1024 * 1024);
+                ramUsedMb = gcMemory.MemoryLoadBytes / (1024 * 1024);
                 if (ramUsedMb <= 0)
                 {
                     using var curProc = Process.GetCurrentProcess();

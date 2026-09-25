@@ -27,6 +27,65 @@ public class RoadmapFeaturesTests
         Assert.Contains("svc1", enumerator.Current.PayloadJson);
     }
 
+    [Fact]
+    public async Task EventBroadcaster_Multiple_Subscribers_Receive_Same_Broadcast()
+    {
+        var broadcaster = new EventBroadcaster();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+
+        var stream1 = broadcaster.SubscribeAsync(cts.Token);
+        var stream2 = broadcaster.SubscribeAsync(cts.Token);
+
+        var enum1 = stream1.GetAsyncEnumerator(cts.Token);
+        var enum2 = stream2.GetAsyncEnumerator(cts.Token);
+
+        broadcaster.Broadcast("test_event", "{\"data\":\"shared\"}");
+
+        bool hasItem1 = await enum1.MoveNextAsync();
+        bool hasItem2 = await enum2.MoveNextAsync();
+
+        Assert.True(hasItem1);
+        Assert.True(hasItem2);
+        Assert.Equal("test_event", enum1.Current.EventType);
+        Assert.Equal("test_event", enum2.Current.EventType);
+        Assert.Contains("shared", enum1.Current.PayloadJson);
+        Assert.Contains("shared", enum2.Current.PayloadJson);
+    }
+
+    [Fact]
+    public async Task EventBroadcaster_Concurrent_Broadcast_And_Subscribe_DoesNotLoseOrCorruptEvents()
+    {
+        var broadcaster = new EventBroadcaster();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+
+        // Pre-broadcast 5 events
+        for (int i = 0; i < 5; i++)
+        {
+            broadcaster.Broadcast("pre_event", $"{{\"seq\":{i}}}");
+        }
+
+        var stream = broadcaster.SubscribeAsync(cts.Token);
+        var enumerator = stream.GetAsyncEnumerator(cts.Token);
+
+        // Broadcast 5 more events concurrently
+        for (int i = 5; i < 10; i++)
+        {
+            broadcaster.Broadcast("post_event", $"{{\"seq\":{i}}}");
+        }
+
+        var received = new List<ServerEventDto>();
+        for (int i = 0; i < 10; i++)
+        {
+            bool hasNext = await enumerator.MoveNextAsync();
+            Assert.True(hasNext);
+            received.Add(enumerator.Current);
+        }
+
+        Assert.Equal(10, received.Count);
+        Assert.Equal(5, received.Count(e => e.EventType == "pre_event"));
+        Assert.Equal(5, received.Count(e => e.EventType == "post_event"));
+    }
+
     [Theory]
     [InlineData("Tailscale-User-Login", "alice@tailscale.com", "alice@tailscale.com")]
     [InlineData("Cf-Access-Authenticated-User-Email", "bob@cloudflare.com", "bob@cloudflare.com")]

@@ -67,6 +67,6 @@ public static class StreamEndpoints
                 linkedCts.Cancel();
                 try { await pingTask; } catch { }
             }
-        });
+        }).AddEndpointFilter<CorvusAuthFilter>();
     }
 }

@@ -8,7 +8,8 @@ public static class SettingsEndpoints
 {
     public static void MapSettingsEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api");
+        var group = app.MapGroup("/api")
+            .AddEndpointFilter<CorvusAuthFilter>();
 
         group.MapGet("/settings", async (ISettingsRepository repo) =>
         {
@@ -40,13 +41,12 @@ public static class SettingsEndpoints
                 _ => $"{totalBytes} B"
             };
 
-            return Results.Ok(new
-            {
-                sizeBytes = totalBytes,
-                dbSizeBytes = sizeBytes,
+            return Results.Ok(new DbStatsResponse(
+                totalBytes,
+                sizeBytes,
                 walSizeBytes,
-                formattedSize = formatted
-            });
+                formatted
+            ));
         });
 
         group.MapGet("/version", async (IUpdateCheckerService updateChecker, CancellationToken ct) =>

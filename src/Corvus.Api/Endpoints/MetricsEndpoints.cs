@@ -1,4 +1,5 @@
 using Corvus.Api.Data;
+using Corvus.Api.Services;
 
 namespace Corvus.Api.Endpoints;
 
@@ -6,7 +7,8 @@ public static class MetricsEndpoints
 {
     public static void MapMetricsEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/metrics");
+        var group = app.MapGroup("/api/metrics")
+            .AddEndpointFilter<CorvusAuthFilter>();
 
         group.MapGet("/system", async (string? range, IMetricsRepository repo) =>
         {

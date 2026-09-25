@@ -1,4 +1,5 @@
 using Corvus.Api.Data;
+using Corvus.Api.Services;
 
 namespace Corvus.Api.Endpoints;
 
@@ -6,7 +7,8 @@ public static class UptimeEndpoints
 {
     public static void MapUptimeEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/uptime");
+        var group = app.MapGroup("/api/uptime")
+            .AddEndpointFilter<CorvusAuthFilter>();
 
         group.MapGet("/", async (string service_id, string? range, IUptimeRepository repo) =>
         {

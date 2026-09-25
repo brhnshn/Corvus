@@ -8,7 +8,10 @@ public static class DashboardEndpoints
 {
     public static void MapDashboardEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/dashboard/summary", async (
+        var group = app.MapGroup("/api/dashboard")
+            .AddEndpointFilter<CorvusAuthFilter>();
+
+        group.MapGet("/summary", async (
             IServicesRepository servicesRepo,
             IDockerService docker,
             IBackupRepository backupRepo,

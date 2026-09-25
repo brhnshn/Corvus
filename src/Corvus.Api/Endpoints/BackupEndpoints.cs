@@ -8,8 +8,11 @@ public static class BackupEndpoints
 {
     public static void MapBackupEndpoints(this IEndpointRouteBuilder app)
     {
+        var group = app.MapGroup("/api")
+            .AddEndpointFilter<CorvusAuthFilter>();
+
         // Corvus Veritabanı Yedek İndirme (Dahili Sıcak Yedek Snapshot)
-        app.MapGet("/api/backup/download", async (
+        group.MapGet("/backup/download", async (
             IDbConnectionFactory db,
             IBackupRepository repo,
             IEventBroadcaster broadcaster) =>
@@ -29,7 +32,8 @@ public static class BackupEndpoints
                 using (var conn = db.CreateConnection())
                 {
                     using var cmd = conn.CreateCommand();
-                    cmd.CommandText = $"VACUUM INTO '{tempFile.Replace("'", "''")}';";
+                    string safeSqlPath = tempFile.Replace('\\', '/').Replace("'", "''");
+                    cmd.CommandText = $"VACUUM INTO '{safeSqlPath}';";
                     cmd.ExecuteNonQuery();
                 }
 
@@ -61,7 +65,7 @@ public static class BackupEndpoints
         });
 
         // Backup event listesi
-        app.MapGet("/api/backup-events", async (int? limit, IBackupRepository repo) =>
+        group.MapGet("/backup-events", async (int? limit, IBackupRepository repo) =>
         {
             var events = await repo.GetRecentAsync(limit ?? 10);
             return Results.Ok(events);

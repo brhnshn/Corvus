@@ -57,7 +57,8 @@ public static class PushEndpoints
         });
 
         // Dead Man's Snitch Monitör Yönetimi
-        var snitchGroup = app.MapGroup("/api/push-monitors");
+        var snitchGroup = app.MapGroup("/api/push-monitors")
+            .AddEndpointFilter<CorvusAuthFilter>();
 
         snitchGroup.MapGet("/", async (IPushMonitorRepository pushRepo) =>
         {

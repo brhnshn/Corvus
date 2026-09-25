@@ -1,5 +1,6 @@
 using Corvus.Api.Data;
 using Corvus.Api.Models;
+using Corvus.Api.Services;
 
 namespace Corvus.Api.Endpoints;
 
@@ -7,7 +8,8 @@ public static class ServicesEndpoints
 {
     public static void MapServicesEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/services");
+        var group = app.MapGroup("/api/services")
+            .AddEndpointFilter<CorvusAuthFilter>();
 
         group.MapGet("/", async (IServicesRepository repo) =>
         {

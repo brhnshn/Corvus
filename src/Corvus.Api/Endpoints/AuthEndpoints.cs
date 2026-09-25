@@ -71,22 +71,12 @@ public static class AuthEndpoints
             return Results.Ok(new GenericApiResponse(true, "Giriş başarılı."));
         });
 
-        group.MapPost("/toggle-registration", async (ToggleRegistrationRequest request, HttpContext context, IAuthService auth) =>
+        group.MapPost("/toggle-registration", async (ToggleRegistrationRequest request, IAuthService auth) =>
         {
-            if (auth.IsAuthEnabled)
-            {
-                string? token = context.Request.Cookies["corvus_session"];
-                var (isAuth, _) = auth.ValidateSessionToken(token);
-                if (!isAuth)
-                {
-                    return Results.Unauthorized();
-                }
-            }
-
             await auth.SetRegistrationEnabledAsync(request.Enabled);
             string msg = request.Enabled ? "Kayıtlar başarıyla açıldı." : "Kayıtlar başarıyla kapatıldı.";
             return Results.Ok(new GenericApiResponse(true, msg));
-        });
+        }).AddEndpointFilter<CorvusAuthFilter>();
 
         group.MapPost("/logout", (HttpContext context, IAuthService auth) =>
         {

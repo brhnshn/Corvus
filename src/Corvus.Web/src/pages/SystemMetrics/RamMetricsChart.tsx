@@ -88,7 +88,7 @@ export const RamMetricsChart: React.FC<RamMetricsChartProps> = ({
                 return item?.fullTime || '';
               }}
               itemStyle={{ color: '#c084fc', fontWeight: 600 }}
-              formatter={(value: unknown, _: unknown, item: any) => [
+              formatter={(value: unknown, _: unknown, item: { payload?: RamChartDataPoint }) => [
                 `${value} GB / ${item?.payload?.ramTotalGb ?? totalRamGb} GB (%${item?.payload?.ramPercent ?? ''})`,
                 t('metrics.usedRamName')
               ]}

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using Corvus.Api.Data;
@@ -86,6 +87,59 @@ public class NotificationService : INotificationService
         }
     }
 
+    public static bool ValidateWebhookUrl(string? url, bool isTr, out string? errorMessage)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            errorMessage = isTr ? "Webhook URL boş olamaz." : "Webhook URL cannot be empty.";
+            return false;
+        }
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || 
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            errorMessage = isTr ? "Geçersiz URL veya desteklenmeyen protokol (yalnızca HTTP/HTTPS desteklenir)." : "Invalid URL or unsupported protocol (only HTTP/HTTPS supported).";
+            return false;
+        }
+
+        string host = uri.DnsSafeHost.Trim('[', ']').ToLowerInvariant();
+        if (host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "0.0.0.0" || host == "::" ||
+            host == "169.254.169.254" || host == "metadata.google.internal")
+        {
+            errorMessage = isTr 
+                ? "Güvenlik uyarısı: Hedef URL yerel veya bulut metadata adresine işaret ediyor (SSRF Koruması)." 
+                : "Security warning: Target URL points to local or cloud metadata address (SSRF Protection).";
+            return false;
+        }
+
+        if (IPAddress.TryParse(host, out var ip))
+        {
+            if (ip.IsIPv4MappedToIPv6)
+            {
+                ip = ip.MapToIPv4();
+            }
+
+            bool isLinkLocalV4 = ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork &&
+                                 ip.GetAddressBytes()[0] == 169 && ip.GetAddressBytes()[1] == 254;
+
+            if (IPAddress.IsLoopback(ip) || 
+                ip.Equals(IPAddress.Any) || 
+                ip.Equals(IPAddress.IPv6Any) || 
+                ip.IsIPv6LinkLocal || 
+                ip.IsIPv6SiteLocal ||
+                isLinkLocalV4)
+            {
+                errorMessage = isTr 
+                    ? "Güvenlik uyarısı: Hedef URL yerel veya bulut metadata adresine işaret ediyor (SSRF Koruması)." 
+                    : "Security warning: Target URL points to local or cloud metadata address (SSRF Protection).";
+                return false;
+            }
+        }
+
+        errorMessage = null;
+        return true;
+    }
+
     public async Task<NotificationResult> TestChannelAsync(string channel, string? webhookUrl, string? botToken, string? chatId, CancellationToken ct = default)
     {
         var settings = await _settings.GetAllAsync();
@@ -103,7 +157,9 @@ public class NotificationService : INotificationService
                 case "discord":
                     if (string.IsNullOrWhiteSpace(webhookUrl))
                         return new NotificationResult(false, isTr ? "Discord Webhook URL boş olamaz." : "Discord Webhook URL cannot be empty.");
-                    await SendDiscordAsync(webhookUrl, title, message, isDown: false, ct);
+                    if (!ValidateWebhookUrl(webhookUrl, isTr, out var discordErr))
+                        return new NotificationResult(false, discordErr!);
+                    await SendDiscordAsync(webhookUrl!, title, message, isDown: false, ct);
                     return new NotificationResult(true, isTr ? "Discord test bildirimi başarıyla gönderildi." : "Discord test notification sent successfully.");
 
                 case "telegram":
@@ -115,13 +171,17 @@ public class NotificationService : INotificationService
                 case "ntfy":
                     if (string.IsNullOrWhiteSpace(webhookUrl))
                         return new NotificationResult(false, isTr ? "Ntfy URL / Topic boş olamaz." : "Ntfy URL / Topic cannot be empty.");
-                    await SendNtfyAsync(webhookUrl, title, message, isDown: false, ct);
+                    if (!ValidateWebhookUrl(webhookUrl, isTr, out var ntfyErr))
+                        return new NotificationResult(false, ntfyErr!);
+                    await SendNtfyAsync(webhookUrl!, title, message, isDown: false, ct);
                     return new NotificationResult(true, isTr ? "Ntfy test bildirimi başarıyla gönderildi." : "Ntfy test notification sent successfully.");
 
                 case "webhook":
                     if (string.IsNullOrWhiteSpace(webhookUrl))
                         return new NotificationResult(false, isTr ? "Webhook URL boş olamaz." : "Webhook URL cannot be empty.");
-                    await SendGenericWebhookAsync(webhookUrl, "test", title, message, ct);
+                    if (!ValidateWebhookUrl(webhookUrl, isTr, out var hookErr))
+                        return new NotificationResult(false, hookErr!);
+                    await SendGenericWebhookAsync(webhookUrl!, "test", title, message, ct);
                     return new NotificationResult(true, isTr ? "Generic Webhook test çağrısı başarıyla yapıldı." : "Generic Webhook test call executed successfully.");
 
                 default:
@@ -137,6 +197,12 @@ public class NotificationService : INotificationService
 
     private async Task SendDiscordAsync(string webhookUrl, string title, string message, bool isDown, CancellationToken ct)
     {
+        if (!ValidateWebhookUrl(webhookUrl, isTr: false, out var err))
+        {
+            _logger.LogWarning("Discord bildirim gönderimi engellendi: {Error}", err);
+            return;
+        }
+
         try
         {
             var client = _httpClientFactory.CreateClient();
@@ -179,14 +245,16 @@ public class NotificationService : INotificationService
             var client = _httpClientFactory.CreateClient();
             client.Timeout = TimeSpan.FromSeconds(8);
 
-            string fullText = $"*{title}*\n\n{message}";
-            string url = $"https://api.telegram.org/bot{botToken}/sendMessage";
+            string safeTitle = WebUtility.HtmlEncode(title);
+            string safeMessage = WebUtility.HtmlEncode(message);
+            string fullText = $"<b>{safeTitle}</b>\n\n{safeMessage}";
+            string url = $"https://api.telegram.org/bot{Uri.EscapeDataString(botToken)}/sendMessage";
 
             string json = $$"""
             {
               "chat_id": {{JsonSerializer.Serialize(chatId, CorvusJsonSerializerContext.Default.String)}},
               "text": {{JsonSerializer.Serialize(fullText, CorvusJsonSerializerContext.Default.String)}},
-              "parse_mode": "Markdown"
+              "parse_mode": "HTML"
             }
             """;
 
@@ -205,6 +273,12 @@ public class NotificationService : INotificationService
 
     private async Task SendNtfyAsync(string ntfyUrl, string title, string message, bool isDown, CancellationToken ct)
     {
+        if (!ValidateWebhookUrl(ntfyUrl, isTr: false, out var err))
+        {
+            _logger.LogWarning("Ntfy bildirim gönderimi engellendi: {Error}", err);
+            return;
+        }
+
         try
         {
             var client = _httpClientFactory.CreateClient();
@@ -230,6 +304,12 @@ public class NotificationService : INotificationService
 
     private async Task SendGenericWebhookAsync(string webhookUrl, string eventType, string title, string message, CancellationToken ct)
     {
+        if (!ValidateWebhookUrl(webhookUrl, isTr: false, out var err))
+        {
+            _logger.LogWarning("Generic webhook bildirim gönderimi engellendi: {Error}", err);
+            return;
+        }
+
         try
         {
             var client = _httpClientFactory.CreateClient();

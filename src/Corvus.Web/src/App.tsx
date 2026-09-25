@@ -77,18 +77,24 @@ export const App: React.FC = () => {
     }
   }, [isStatusPath]);
 
-  // Server-Sent Events (SSE) — Canlı Veri Yayını Bağlantısı
-  // onerror: bağlantı kesilince EventSource otomatik yeniden bağlanır;
-  // bu davranış konsolu spamlar. Manuel backoff ile kontrol ediyoruz.
+  // Server-Sent Events (SSE) — Canlı Veri Yayını Bağlantısı (Uptime Kuma Dayanıklılık Mimarisi)
+  // Ağ kopsa bile asla pes etmez; backoff ile dener, internet geri geldiğinde veya
+  // sekme odaklandığında anında yeniden bağlanıp önbelleği geçersiz kılar.
   useEffect(() => {
     if (isStatusPath) return;
 
     let eventSource: EventSource | null = null;
     let retryCount = 0;
-    const MAX_RETRIES = 5;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let isDisposed = false;
 
     const connect = () => {
+      if (isDisposed) return;
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+
       try {
         eventSource = new EventSource('/api/stream/events');
 
@@ -100,11 +106,15 @@ export const App: React.FC = () => {
           try {
             const parsed = JSON.parse(event.data);
             window.dispatchEvent(new CustomEvent('corvus_event', { detail: parsed }));
-            if (parsed.type?.includes('container')) {
+            const eventType: string | undefined = parsed.eventType || parsed.type;
+            if (eventType?.includes('container')) {
               invalidateCache('/containers');
               invalidateCache('/dashboard');
-            } else if (parsed.type?.includes('service')) {
+            } else if (eventType?.includes('service')) {
               invalidateCache('/services');
+              invalidateCache('/dashboard');
+            } else if (eventType?.includes('push') || eventType?.includes('snitch')) {
+              invalidateCache('/push-monitors');
               invalidateCache('/dashboard');
             }
           } catch {
@@ -113,31 +123,51 @@ export const App: React.FC = () => {
         };
 
         eventSource.onerror = () => {
-          // EventSource hata alınca kendi başına reconnect dener;
-          // bunu önlemek için kapatıp kendi backoff'umuzu kullanırız.
+          if (isDisposed) return;
           eventSource?.close();
           eventSource = null;
 
-          if (retryCount >= MAX_RETRIES) {
-            // 5 denemeden sonra vazgeç, console.warn bir kez bas
-            console.warn('[SSE] Bağlantı kurulamadı, yeniden deneme durduruldu.');
-            return;
-          }
-
-          const delay = Math.min(1000 * 2 ** retryCount, 30000); // 1s, 2s, 4s … max 30s
+          // Uptime Kuma tarzı: Asla pes etme; 1s, 2s, 4s, 8s, 16s ... max 20s aralıkla arka planda denemeye devam et
+          const delay = Math.min(1000 * 2 ** Math.min(retryCount, 4), 20000);
           retryCount++;
+          if (retryTimer) clearTimeout(retryTimer);
           retryTimer = setTimeout(connect, delay);
         };
       } catch (e) {
-        // EventSource constructor başarısız (çok nadir, güvenli ortam gerektirebilir)
         console.warn('[SSE] EventSource oluşturulamadı:', e);
       }
     };
 
+    const handleOnline = () => {
+      if (isDisposed) return;
+      if (retryTimer) clearTimeout(retryTimer);
+      retryCount = 0;
+      invalidateCache(); // İnternet geri geldiğinde bayat önbelleği temizle
+      connect();
+    };
+
+    const handleVisibility = () => {
+      if (isDisposed) return;
+      if (document.visibilityState === 'visible') {
+        // Sekme tekrar öne geldiğinde bağlantı kopuksa hemen canlandır
+        if (!eventSource || eventSource.readyState === EventSource.CLOSED) {
+          if (retryTimer) clearTimeout(retryTimer);
+          retryCount = 0;
+          invalidateCache();
+          connect();
+        }
+      }
+    };
+
     connect();
+    window.addEventListener('online', handleOnline);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
+      isDisposed = true;
       if (retryTimer) clearTimeout(retryTimer);
+      window.removeEventListener('online', handleOnline);
+      document.removeEventListener('visibilitychange', handleVisibility);
       eventSource?.close();
     };
   }, [isStatusPath]);

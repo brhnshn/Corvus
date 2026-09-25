@@ -7,7 +7,8 @@ public static class ContainersEndpoints
 {
     public static void MapContainersEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/containers");
+        var group = app.MapGroup("/api/containers")
+            .AddEndpointFilter<CorvusAuthFilter>();
 
         group.MapGet("/", async (IDockerService docker) =>
         {

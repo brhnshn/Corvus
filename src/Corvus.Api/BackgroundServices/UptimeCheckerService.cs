@@ -45,7 +45,7 @@ public class UptimeCheckerService : BackgroundService
             }
         };
 
-        _httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        _httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -63,7 +63,7 @@ public class UptimeCheckerService : BackgroundService
                 var pushRepo = scope.ServiceProvider.GetRequiredService<IPushMonitorRepository>();
                 var settingsRepo = scope.ServiceProvider.GetRequiredService<ISettingsRepository>();
 
-                // Bildirim eşiği (varsayılan: 2 ardışık kontrol hatası)
+                // Bildirim ve durum eşiği (varsayılan: 2 ardışık kontrol hatası)
                 int alertThreshold = 2;
                 var thresholdSetting = await settingsRepo.GetAsync("uptime_alert_threshold");
                 if (int.TryParse(thresholdSetting, out var parsedThreshold) && parsedThreshold >= 1)
@@ -73,8 +73,19 @@ public class UptimeCheckerService : BackgroundService
 
                 var allServices = await servicesRepo.GetAllAsync();
 
-                var checkTasks = allServices.Select(s => CheckSingleServiceAsync(s, stoppingToken));
-                var checkResults = await Task.WhenAll(checkTasks);
+                // Uptime Kuma tarzı kontrollü eşzamanlılık (DNS/soket tükenmesini engellemek için)
+                var checkResults = new ConcurrentBag<(Service Service, UptimeCheck? Check, SslInfoHolder? Ssl)>();
+                var parallelOptions = new ParallelOptions
+                {
+                    MaxDegreeOfParallelism = 6,
+                    CancellationToken = stoppingToken
+                };
+
+                await Parallel.ForEachAsync(allServices, parallelOptions, async (s, ct) =>
+                {
+                    var res = await CheckSingleServiceAsync(s, ct);
+                    checkResults.Add(res);
+                });
 
                 foreach (var (s, check, sslHolder) in checkResults)
                 {
@@ -98,14 +109,25 @@ public class UptimeCheckerService : BackgroundService
                         _consecutiveFailures.AddOrUpdate(s.Id, 1, (_, count) => count + 1);
                         int failures = _consecutiveFailures[s.Id];
 
-                        // Eşik değerine ulaşıldıysa ve henüz alarm gönderilmediyse bildirim fırlat
-                        if (failures >= alertThreshold && _alertedDown.TryAdd(s.Id, true))
+                        // Uptime Kuma 3-State Machine Mantığı:
+                        // Eşik değerine ulaşıldıysa -> Kesin DOWN
+                        if (failures >= alertThreshold)
                         {
-                            _ = notifService.DispatchServiceAlertAsync(s.Name, targetUrl ?? $"Port:{s.Port}", isDown: true, check.ErrorMessage, stoppingToken);
+                            if (_alertedDown.TryAdd(s.Id, true))
+                            {
+                                _ = notifService.DispatchServiceAlertAsync(s.Name, targetUrl ?? $"Port:{s.Port}", isDown: true, check.ErrorMessage, stoppingToken);
+                            }
+
+                            await servicesRepo.UpdateStatusAsync(s.Id, "down");
                             _eventBroadcaster.Broadcast("service_status_changed", $"{{\"id\":\"{s.Id}\",\"status\":\"down\"}}");
                         }
-
-                        await servicesRepo.UpdateStatusAsync(s.Id, "down");
+                        else
+                        {
+                            // Henüz eşik aşılmadı -> Geçici aksaklık (PENDING / DEGRADED)
+                            _logger.LogInformation("Servis {Name} geçici hata verdi ({Failures}/{Threshold}). Durum 'degraded' olarak işaretlendi.", s.Name, failures, alertThreshold);
+                            await servicesRepo.UpdateStatusAsync(s.Id, "degraded");
+                            _eventBroadcaster.Broadcast("service_status_changed", $"{{\"id\":\"{s.Id}\",\"status\":\"degraded\"}}");
+                        }
                     }
                     else if (check.Status == "up")
                     {
@@ -226,7 +248,7 @@ public class UptimeCheckerService : BackgroundService
                 {
                     using var tcp = new TcpClient();
                     using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                    cts.CancelAfter(TimeSpan.FromSeconds(5));
+                    cts.CancelAfter(TimeSpan.FromSeconds(8));
                     await tcp.ConnectAsync(host, port, cts.Token);
                     return null;
                 }

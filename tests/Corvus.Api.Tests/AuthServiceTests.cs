@@ -169,4 +169,71 @@ public class AuthServiceTests
         string? userCf = authService.CheckProxyAuthHeader(headersCf);
         Assert.Equal("devops@company.com", userCf);
     }
+
+    [Fact]
+    public async Task CorvusAuthFilter_Allows_When_Proxy_Header_Present()
+    {
+        var authService = CreateService();
+        var filter = new CorvusAuthFilter(authService);
+
+        var httpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        httpContext.Request.Headers["Tailscale-User-Login"] = "admin@tailscale";
+
+        var filterContext = Microsoft.AspNetCore.Http.EndpointFilterInvocationContext.Create(httpContext);
+        bool nextCalled = false;
+
+        var result = await filter.InvokeAsync(filterContext, _ =>
+        {
+            nextCalled = true;
+            return ValueTask.FromResult<object?>("success");
+        });
+
+        Assert.True(nextCalled);
+        Assert.Equal("success", result);
+    }
+
+    [Fact]
+    public async Task CorvusAuthFilter_Allows_When_Valid_Session_Cookie_Present()
+    {
+        var authService = CreateService();
+        var filter = new CorvusAuthFilter(authService);
+
+        string token = authService.GenerateSessionToken("admin");
+
+        var httpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        httpContext.Request.Headers["Cookie"] = $"corvus_session={token}";
+
+        var filterContext = Microsoft.AspNetCore.Http.EndpointFilterInvocationContext.Create(httpContext);
+        bool nextCalled = false;
+
+        var result = await filter.InvokeAsync(filterContext, _ =>
+        {
+            nextCalled = true;
+            return ValueTask.FromResult<object?>("success");
+        });
+
+        Assert.True(nextCalled);
+        Assert.Equal("success", result);
+    }
+
+    [Fact]
+    public async Task CorvusAuthFilter_Returns_Unauthorized_When_Unauthenticated()
+    {
+        var authService = CreateService();
+        var filter = new CorvusAuthFilter(authService);
+
+        var httpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        var filterContext = Microsoft.AspNetCore.Http.EndpointFilterInvocationContext.Create(httpContext);
+        bool nextCalled = false;
+
+        var result = await filter.InvokeAsync(filterContext, _ =>
+        {
+            nextCalled = true;
+            return ValueTask.FromResult<object?>("success");
+        });
+
+        Assert.False(nextCalled);
+        Assert.NotNull(result);
+        Assert.IsAssignableFrom<Microsoft.AspNetCore.Http.IResult>(result);
+    }
 }

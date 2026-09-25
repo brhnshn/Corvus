@@ -164,7 +164,7 @@ public class DockerHttpClient : IDockerHttpClient, IDisposable
     {
         try
         {
-            var response = await _httpClient.PostAsync($"/containers/{containerId}/restart", null, cancellationToken);
+            var response = await _httpClient.PostAsync($"/containers/{Uri.EscapeDataString(containerId)}/restart", null, cancellationToken);
             if (response.IsSuccessStatusCode)
             {
                 return new DockerActionResult(true, "Container yeniden başlatıldı.");
@@ -185,7 +185,7 @@ public class DockerHttpClient : IDockerHttpClient, IDisposable
     {
         try
         {
-            var response = await _httpClient.PostAsync($"/containers/{containerId}/start", null, cancellationToken);
+            var response = await _httpClient.PostAsync($"/containers/{Uri.EscapeDataString(containerId)}/start", null, cancellationToken);
             if (response.IsSuccessStatusCode)
             {
                 return new DockerActionResult(true, "Container başlatıldı.");
@@ -211,7 +211,7 @@ public class DockerHttpClient : IDockerHttpClient, IDisposable
     {
         try
         {
-            var response = await _httpClient.PostAsync($"/containers/{containerId}/stop", null, cancellationToken);
+            var response = await _httpClient.PostAsync($"/containers/{Uri.EscapeDataString(containerId)}/stop", null, cancellationToken);
             if (response.IsSuccessStatusCode)
             {
                 return new DockerActionResult(true, "Container durduruldu.");
@@ -237,7 +237,7 @@ public class DockerHttpClient : IDockerHttpClient, IDisposable
     {
         try
         {
-            var response = await _httpClient.PostAsync($"/containers/{containerId}/pause", null, cancellationToken);
+            var response = await _httpClient.PostAsync($"/containers/{Uri.EscapeDataString(containerId)}/pause", null, cancellationToken);
             if (response.IsSuccessStatusCode)
             {
                 return new DockerActionResult(true, "Container duraklatıldı.");
@@ -258,7 +258,7 @@ public class DockerHttpClient : IDockerHttpClient, IDisposable
     {
         try
         {
-            var response = await _httpClient.PostAsync($"/containers/{containerId}/unpause", null, cancellationToken);
+            var response = await _httpClient.PostAsync($"/containers/{Uri.EscapeDataString(containerId)}/unpause", null, cancellationToken);
             if (response.IsSuccessStatusCode)
             {
                 return new DockerActionResult(true, "Container devam ettirildi.");
@@ -279,7 +279,7 @@ public class DockerHttpClient : IDockerHttpClient, IDisposable
     {
         try
         {
-            string url = $"/containers/{containerId}/stats?stream=false";
+            string url = $"/containers/{Uri.EscapeDataString(containerId)}/stats?stream=false";
             var response = await _httpClient.GetAsync(url, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
@@ -379,7 +379,7 @@ public class DockerHttpClient : IDockerHttpClient, IDisposable
     {
         try
         {
-            string url = $"/containers/{containerId}/logs?stdout=true&stderr=true&timestamps=true&tail={tail}";
+            string url = $"/containers/{Uri.EscapeDataString(containerId)}/logs?stdout=true&stderr=true&timestamps=true&tail={tail}";
             var response = await _httpClient.GetAsync(url, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
