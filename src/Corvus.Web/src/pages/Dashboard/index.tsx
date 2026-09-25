@@ -63,10 +63,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   useEffect(() => {
     loadData();
 
-    // 10 saniyede bir arka planda güncelle (yalnızca sekme aktifken)
+    // 30 saniyede bir arka planda güncelle (yalnızca sekme aktifken)
+    // SWR cache zaten arka planda fetch yapıyor; bu UI'ı yeniler
     const interval = setInterval(() => {
       if (!document.hidden) loadData();
-    }, 10000);
+    }, 30000);
 
     const onVisible = () => {
       if (!document.hidden) loadData();
@@ -93,7 +94,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   const downServices = loading ? 0 : (summary?.downServices ?? 0);
   const degradedServices = loading ? 0 : (summary?.degradedServices ?? 0);
   const failedPushMonitors = loading ? [] : pushMonitors.filter(p => p.status === 'down');
-  const stoppedContainers = loading ? [] : containers.filter(c => c.State.toLowerCase() !== 'running');
+  // Sadece 'exited' ve 'dead' state'ler gerçek alarm; paused/restarting/created geçici ve normaldir
+  const stoppedContainers = loading ? [] : containers.filter(
+    c => ['exited', 'dead'].includes(c.State.toLowerCase())
+  );
   const sslWarningCount = loading ? 0 : services.filter(
     s => typeof s.sslExpiryDays === 'number' && s.sslExpiryDays <= 14 && s.sslExpiryDays >= 0
   ).length;

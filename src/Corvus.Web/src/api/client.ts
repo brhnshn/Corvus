@@ -180,10 +180,26 @@ export async function fetchCachedJson<T>(url: string, options?: RequestInit, ttl
   const now = Date.now();
   const cached = apiCache.get(url) as CacheEntry<T> | undefined;
 
+  // Cache geçerliyse doğrudan döndür
   if (cached && (now - cached.timestamp < cached.ttl)) {
     return cached.data;
   }
 
+  // Stale veri varsa: hemen eski veriyi döndür, arka planda yenile
+  // Bu sayede UI asla boş array veya hatalı state göstermez
+  if (cached) {
+    fetchJson<T>(url, options)
+      .then(freshData => {
+        apiCache.set(url, { data: freshData, timestamp: Date.now(), ttl: ttlMs });
+      })
+      .catch(() => {
+        // Arka plan fetch başarısız olursa mevcut cache'i koru (TTL uzat)
+        apiCache.set(url, { data: cached.data, timestamp: Date.now(), ttl: ttlMs });
+      });
+    return cached.data;
+  }
+
+  // İlk kez yükleme: gerçekten bekle
   const data = await fetchJson<T>(url, options);
   apiCache.set(url, { data, timestamp: now, ttl: ttlMs });
   return data;
