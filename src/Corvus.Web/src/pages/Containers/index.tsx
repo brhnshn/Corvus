@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api, type DockerContainer, type ContainerStats } from '../../api/client';
 import { RefreshCw, Boxes, Layers, List } from 'lucide-react';
 import { ContainerList } from './ContainerList';
 import { ComposeStackGroup } from './ComposeStackGroup';
 import { ContainerLogsModal } from './ContainerLogsModal';
 import { useI18n } from '../../i18n';
+import { useEntityGrouping, deriveSmartGroup } from '../../utils/grouping';
 
 export const ContainersPage: React.FC = () => {
   const { t } = useI18n();
@@ -14,11 +15,10 @@ export const ContainersPage: React.FC = () => {
   const [actionInProgress, setActionInProgress] = useState<{ id: string; action: string } | null>(null);
   const [selectedLogsContainer, setSelectedLogsContainer] = useState<{ id: string; name: string } | null>(null);
   
-  // Roadmap 2.2: Compose Stack gruplama toggle'ı
-  const [viewMode, setViewMode] = useState<'flat' | 'compose'>('flat');
-  const [collapsedStacks, setCollapsedStacks] = useState<Record<string, boolean>>({});
+  // Görünüm Modu: Düz Liste vs Gruplanmış Görünüm (Compose & Akıllı Gruplar)
+  const [viewMode, setViewMode] = useState<'flat' | 'compose'>('compose');
 
-  // Roadmap 1.3: Çalışan container'lar için canlı stats sorgusunu arka planda eşzamanlı (paralel) işlet
+  // Çalışan container'lar için canlı stats sorgusunu arka planda eşzamanlı (paralel) işlet
   const fetchStatsBackground = async (runningContainers: DockerContainer[]) => {
     await Promise.allSettled(
       runningContainers.map(async (c) => {
@@ -40,7 +40,6 @@ export const ContainersPage: React.FC = () => {
       setContainers(data);
 
       const runningContainers = data.filter(c => c.State.toLowerCase() === 'running');
-      // non-blocking: stats sorgusunu arka planda yürüt, UI kilitlenmesini engelle
       fetchStatsBackground(runningContainers);
     } catch (err) {
       console.error('Container listesi alınamadı', err);
@@ -66,7 +65,7 @@ export const ContainersPage: React.FC = () => {
     };
   }, []);
 
-  // Roadmap 3.3: Container Yaşam Döngüsü Eylemleri
+  // Container Yaşam Döngüsü Eylemleri
   const handleAction = async (action: 'start' | 'stop' | 'pause' | 'unpause' | 'restart', id: string, name: string) => {
     const actionLabels: Record<string, string> = {
       start: t('containers.actionStart'),
@@ -110,23 +109,31 @@ export const ContainersPage: React.FC = () => {
     }
   };
 
-  // Roadmap 2.2: Compose Stack Gruplaması
-  const groupedStacks = useMemo(() => {
-    const groups: Record<string, DockerContainer[]> = {};
-    for (const c of containers) {
-      const projectName = c.Labels?.['com.docker.compose.project'] || t('containers.standalone');
-      if (!groups[projectName]) groups[projectName] = [];
-      groups[projectName].push(c);
-    }
-    return groups;
-  }, [containers, t]);
-
-  const toggleStackCollapse = (stackName: string) => {
-    setCollapsedStacks(prev => ({
-      ...prev,
-      [stackName]: !prev[stackName]
-    }));
-  };
+  // Ortak Gruplandırma & Manuel Düzenleme Motoru
+  const {
+    groups,
+    collapsed,
+    toggleCollapse,
+    renameGroup,
+    draggingId,
+    dragOverGroup,
+    handleDragStart,
+    handleDragEnd,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop
+  } = useEntityGrouping<DockerContainer>({
+    items: containers,
+    getId: (c) => c.Id,
+    getName: (c) => c.Names?.[0]?.replace(/^\//, '') || c.Id.slice(0, 12),
+    getCategory: (c) => {
+      const composeProject = c.Labels?.['com.docker.compose.project'];
+      const rawName = c.Names?.[0] || c.Id.slice(0, 12);
+      const cleanName = rawName.replace(/^\//, '');
+      return deriveSmartGroup(cleanName, composeProject);
+    },
+    storageKey: 'corvus_container_groups'
+  });
 
   return (
     <div className="space-y-6">
@@ -138,17 +145,8 @@ export const ContainersPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          {/* Görünüm Seçici (Düz Liste vs Compose Stack) */}
+          {/* Görünüm Seçici (Düz Liste vs Compose / Akıllı Gruplar) */}
           <div className="flex items-center p-0.5 rounded-lg bg-[#1a1d29] border border-[#2a2e3f]">
-            <button
-              onClick={() => setViewMode('flat')}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                viewMode === 'flat' ? 'bg-[#0f1117] text-white shadow-sm' : 'text-[#9ca3af] hover:text-[#e5e7eb]'
-              }`}
-            >
-              <List className="w-3.5 h-3.5" />
-              {t('containers.viewFlat')}
-            </button>
             <button
               onClick={() => setViewMode('compose')}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
@@ -156,7 +154,16 @@ export const ContainersPage: React.FC = () => {
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
-              {t('containers.viewCompose')}
+              <span>Gruplar</span>
+            </button>
+            <button
+              onClick={() => setViewMode('flat')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                viewMode === 'flat' ? 'bg-[#0f1117] text-white shadow-sm' : 'text-[#9ca3af] hover:text-[#e5e7eb]'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>{t('containers.viewFlat')}</span>
             </button>
           </div>
 
@@ -165,15 +172,15 @@ export const ContainersPage: React.FC = () => {
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#2a2e3f] bg-[#1a1d29] text-xs font-medium text-[#9ca3af] hover:text-[#e5e7eb] hover:bg-[#1e2130] transition-colors cursor-pointer"
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            {t('common.refresh')}
+            <span>{t('common.refresh')}</span>
           </button>
         </div>
       </div>
 
       {loading && containers.length === 0 && (
         <div className="flex items-center justify-center h-64 text-[#9ca3af]">
-          <RefreshCw className="w-6 h-6 animate-spin mr-2" />
-          {t('common.loading')}
+          <RefreshCw className="w-6 h-6 animate-spin mr-2 text-indigo-400" />
+          <span>{t('common.loading')}</span>
         </div>
       )}
 
@@ -185,6 +192,7 @@ export const ContainersPage: React.FC = () => {
         </div>
       )}
 
+      {/* Düz Liste Görünümü */}
       {containers.length > 0 && viewMode === 'flat' && (
         <ContainerList
           items={containers}
@@ -195,13 +203,22 @@ export const ContainersPage: React.FC = () => {
         />
       )}
 
+      {/* Akıllı Gruplar & Compose Stack Görünümü */}
       {containers.length > 0 && viewMode === 'compose' && (
         <ComposeStackGroup
-          groupedStacks={groupedStacks}
-          collapsedStacks={collapsedStacks}
+          groups={groups}
+          collapsed={collapsed}
+          onToggleCollapse={toggleCollapse}
+          onRenameGroup={renameGroup}
+          dragOverGroup={dragOverGroup}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          draggingId={draggingId}
           statsMap={statsMap}
           actionInProgress={actionInProgress}
-          onToggleCollapse={toggleStackCollapse}
           onAction={handleAction}
           onOpenLogs={(id, name) => setSelectedLogsContainer({ id, name })}
         />
@@ -218,3 +235,5 @@ export const ContainersPage: React.FC = () => {
     </div>
   );
 };
+
+export default ContainersPage;

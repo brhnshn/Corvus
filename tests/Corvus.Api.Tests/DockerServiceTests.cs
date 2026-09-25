@@ -74,8 +74,21 @@ public class DockerServiceTests
 
         Assert.Equal("redis_cache", service.Name);
         Assert.Equal("http://localhost:6380", service.Url);
-        Assert.Equal("Container'lar", service.Category);
+        Assert.Equal("Database", service.Category);
         Assert.Equal("healthy", service.Status);
+    }
+
+    [Theory]
+    [InlineData("internal-adminer", "Internal")]
+    [InlineData("core-postgres", "Core")]
+    [InlineData("burhanlife_web", "Web")]
+    [InlineData("my-redis", "Database")]
+    [InlineData("stalwart-mail", "Mail")]
+    [InlineData("random-container", "General")]
+    public void DeriveCategoryFromName_DerivesCorrectCategory(string name, string expected)
+    {
+        var category = DockerService.DeriveCategoryFromName(name);
+        Assert.Equal(expected, category);
     }
 
     [Fact]
@@ -97,7 +110,7 @@ public class DockerServiceTests
         var service = dockerService.MapContainerToService(container);
 
         Assert.Equal("https://whoami.local.domain", service.Url);
-        Assert.Equal("Container'lar", service.Category);
+        Assert.Equal("General", service.Category);
     }
 
     [Fact]

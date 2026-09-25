@@ -164,7 +164,7 @@ public class DockerService : IDockerService
         }
         else
         {
-            category = "Container'lar";
+            category = DeriveCategoryFromName(cleanName);
         }
 
         string? url = null;
@@ -219,5 +219,24 @@ public class DockerService : IDockerService
             CreatedAt = DateTime.UtcNow.ToString("o"),
             UpdatedAt = DateTime.UtcNow.ToString("o")
         };
+    }
+
+    public static string DeriveCategoryFromName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "General";
+        string lower = name.Trim().ToLowerInvariant();
+
+        if (lower.StartsWith("internal-") || lower.StartsWith("internal_"))
+            return "Internal";
+        if (lower.StartsWith("core-") || lower.StartsWith("core_"))
+            return "Core";
+        if (lower.EndsWith("_web") || lower.EndsWith("-web") || lower.StartsWith("web-") || lower.StartsWith("web_"))
+            return "Web";
+        if (lower.Contains("postgres") || lower.Contains("mysql") || lower.Contains("mariadb") || lower.Contains("redis") || lower.Contains("mongo") || lower.Contains("-db") || lower.Contains("_db"))
+            return "Database";
+        if (lower.Contains("mail") || lower.Contains("stalwart") || lower.Contains("postfix"))
+            return "Mail";
+
+        return "General";
     }
 }

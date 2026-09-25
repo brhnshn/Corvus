@@ -9,7 +9,6 @@ import {
   Server, 
   RefreshCw, 
   Trash2,
-  Layers,
   ShieldCheck,
   ArrowUp,
   ArrowDown
@@ -17,6 +16,8 @@ import {
 
 import { formatServiceUrl } from '../../utils/url';
 import { AddServiceModal } from './AddServiceModal';
+import { GroupSection } from '../../components/GroupSection';
+import { useEntityGrouping } from '../../utils/grouping';
 
 export { formatServiceUrl };
 
@@ -27,10 +28,6 @@ export const ServicesPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [reordering, setReordering] = useState(false);
-
-  // Drag & Drop state
-  const [draggingServiceId, setDraggingServiceId] = useState<string | null>(null);
-  const [dragOverCategory, setDragOverCategory] = useState<string | null>(null);
 
   const loadServices = async () => {
     try {
@@ -60,55 +57,6 @@ export const ServicesPage: React.FC = () => {
     };
   }, []);
 
-  // HTML5 Drag and Drop Kategori Taşıma Eylemleri
-  const handleDragStart = (e: React.DragEvent, serviceId: string) => {
-    e.dataTransfer.setData('text/plain', serviceId);
-    e.dataTransfer.effectAllowed = 'move';
-    setDraggingServiceId(serviceId);
-  };
-
-  const handleDragEnd = () => {
-    setDraggingServiceId(null);
-    setDragOverCategory(null);
-  };
-
-  const handleDragOver = (e: React.DragEvent, category: string) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (dragOverCategory !== category) {
-      setDragOverCategory(category);
-    }
-  };
-
-  const handleDragLeave = (category: string) => {
-    if (dragOverCategory === category) {
-      setDragOverCategory(null);
-    }
-  };
-
-  const handleDrop = async (e: React.DragEvent, targetCategory: string) => {
-    e.preventDefault();
-    setDragOverCategory(null);
-    const serviceId = e.dataTransfer.getData('text/plain') || draggingServiceId;
-    if (!serviceId) return;
-
-    const currentService = services.find(s => s.id === serviceId);
-    if (!currentService) return;
-
-    const currentCat = currentService.category || t('services.defaultCategory');
-    if (currentCat === targetCategory) return;
-
-    // Optimistic UI update
-    setServices(prev => prev.map(s => s.id === serviceId ? { ...s, category: targetCategory } : s));
-
-    try {
-      await api.updateService(serviceId, { category: targetCategory });
-    } catch (err) {
-      console.error('Kategori güncellenemedi:', err);
-      await loadServices();
-    }
-  };
-
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(t('services.deleteConfirm', { name }))) return;
     try {
@@ -119,7 +67,7 @@ export const ServicesPage: React.FC = () => {
     }
   };
 
-  // Roadmap 2.4: Servis Sıralama Eylemleri (Yukarı / Aşağı Taşıma)
+  // Servis Sıralama Eylemleri (Yukarı / Aşağı Taşıma)
   const handleMove = async (currentIndex: number, direction: 'up' | 'down') => {
     const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
     if (targetIndex < 0 || targetIndex >= services.length) return;
@@ -152,7 +100,44 @@ export const ServicesPage: React.FC = () => {
     );
   });
 
-  const categories = Array.from(new Set(filtered.map((s) => s.category || 'Diğer')));
+  // Ortak Gruplandırma & Manuel Düzenleme Motoru
+  const {
+    groups,
+    collapsed,
+    toggleCollapse,
+    renameGroup,
+    draggingId,
+    dragOverGroup,
+    handleDragStart,
+    handleDragEnd,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop
+  } = useEntityGrouping<Service>({
+    items: filtered,
+    getId: (s) => s.id,
+    getName: (s) => s.name,
+    getCategory: (s) => s.category || t('groups.general'),
+    storageKey: 'corvus_services',
+    onUpdateCategory: async (id, newCat) => {
+      setServices(prev => prev.map(s => s.id === id ? { ...s, category: newCat } : s));
+      try {
+        await api.updateService(id, { category: newCat });
+      } catch (err) {
+        console.error('Kategori güncellenemedi:', err);
+        await loadServices();
+      }
+    },
+    onBatchUpdateCategory: async (ids, newCat) => {
+      setServices(prev => prev.map(s => ids.includes(s.id) ? { ...s, category: newCat } : s));
+      try {
+        await Promise.allSettled(ids.map(id => api.updateService(id, { category: newCat })));
+      } catch (err) {
+        console.error('Kategoriler güncellenemedi:', err);
+        await loadServices();
+      }
+    }
+  });
 
   return (
     <div className="space-y-6">
@@ -163,91 +148,82 @@ export const ServicesPage: React.FC = () => {
           <p className="text-sm text-[#9ca3af]">{t('services.subtitle')}</p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {/* Arama Input */}
           <div className="relative flex-1 sm:w-64">
-            <Search className="w-4 h-4 text-[#9ca3af] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]" />
             <input
               type="text"
               placeholder={t('services.searchPlaceholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="bg-[#1a1d29] border border-[#2a2e3f] rounded-lg pl-9 pr-4 py-1.5 text-sm text-[#e5e7eb] placeholder-[#9ca3af] focus:outline-none focus:border-[#d4d4d8] w-full"
+              className="w-full pl-9 pr-4 py-2 bg-[#1a1d29] border border-[#2a2e3f] rounded-xl text-sm text-[#e5e7eb] placeholder-[#9ca3af] focus:outline-none focus:border-indigo-500 transition-colors"
             />
           </div>
 
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center justify-center gap-2 px-3.5 py-1.5 rounded-lg bg-[#d4d4d8] text-[#0f1117] text-sm font-semibold hover:bg-[#e4e4e7] transition-colors cursor-pointer shrink-0"
+            className="flex items-center gap-2 px-4 py-2 bg-[#d4d4d8] hover:bg-[#e4e4e7] text-[#0f1117] text-sm font-semibold rounded-xl transition-colors cursor-pointer shadow-xs"
           >
             <Plus className="w-4 h-4" />
-            {t('services.addService')}
+            <span>{t('services.addService')}</span>
+          </button>
+
+          <button
+            onClick={loadServices}
+            className="p-2 rounded-xl border border-[#2a2e3f] bg-[#1a1d29] text-[#9ca3af] hover:text-[#e5e7eb] hover:bg-[#1e2130] transition-colors cursor-pointer"
+            title={t('common.refresh')}
+          >
+            <RefreshCw className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Loading state */}
       {loading && services.length === 0 && (
         <div className="flex items-center justify-center h-64 text-[#9ca3af]">
-          <RefreshCw className="w-6 h-6 animate-spin mr-2" />
+          <RefreshCw className="w-6 h-6 animate-spin mr-2 text-indigo-400" />
           {t('common.loading')}
         </div>
       )}
 
-      {/* Empty state */}
       {!loading && services.length === 0 && (
-        <div className="p-12 rounded-2xl bg-[#1a1d29] border border-[#2a2e3f] text-center max-w-lg mx-auto space-y-4">
-          <Layers className="w-12 h-12 text-[#9ca3af]/40 mx-auto" />
-          <h3 className="text-base font-semibold text-[#e5e7eb]">{t('services.noServicesFound')}</h3>
-          <p className="text-xs text-[#9ca3af]">
+        <div className="flex flex-col items-center justify-center h-64 text-center border border-dashed border-[#2a2e3f] rounded-2xl p-6 bg-[#1a1d29]/40">
+          <Server className="w-12 h-12 text-[#9ca3af]/40 mb-3" />
+          <h3 className="text-base font-semibold text-[#e5e7eb] mb-1">{t('services.noServicesFound')}</h3>
+          <p className="text-xs text-[#9ca3af] max-w-sm mb-4">
             {t('services.noServicesDesc')}
           </p>
           <button
             onClick={() => setShowAddModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#d4d4d8] text-[#0f1117] text-sm font-semibold hover:bg-[#e4e4e7] transition-colors cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 bg-[#d4d4d8] text-[#0f1117] text-xs font-semibold rounded-xl hover:bg-[#e4e4e7] transition-colors cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
-            {t('services.addFirstService')}
+            <Plus className="w-3.5 h-3.5" />
+            <span>{t('services.addService')}</span>
           </button>
         </div>
       )}
 
-      {/* Category Groups */}
-      {categories.map((cat) => {
-        const catServices = filtered.filter((s) => (s.category || t('services.otherCategory')) === cat);
-        if (catServices.length === 0) return null;
-
-        const isOver = dragOverCategory === cat;
+      {/* Category Groups using shared GroupSection */}
+      {groups.map((group) => {
+        if (group.items.length === 0) return null;
 
         return (
-          <div 
-            key={cat} 
-            onDragOver={(e) => handleDragOver(e, cat)}
-            onDragLeave={() => handleDragLeave(cat)}
-            onDrop={(e) => handleDrop(e, cat)}
-            className={`space-y-3 p-3 rounded-2xl transition-all duration-200 ${
-              isOver 
-                ? 'border-2 border-dashed border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/5' 
-                : 'border border-transparent'
-            }`}
+          <GroupSection
+            key={group.name}
+            title={group.name}
+            count={group.items.length}
+            isCollapsed={!!collapsed[group.name]}
+            onToggleCollapse={() => toggleCollapse(group.name)}
+            onRenameGroup={(newName) => renameGroup(group.name, newName)}
+            isDragOver={dragOverGroup === group.name}
+            onDragOver={(e) => handleDragOver(e, group.name)}
+            onDragLeave={() => handleDragLeave(group.name)}
+            onDrop={(e) => handleDrop(e, group.name)}
           >
-            <div className="flex items-center justify-between px-1">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-[#9ca3af] font-mono flex items-center gap-2">
-                <span>{cat}</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#0f1117] text-[#9ca3af] border border-[#2a2e3f]">
-                  {catServices.length}
-                </span>
-              </h2>
-              {draggingServiceId && isOver && (
-                <span className="text-[11px] text-indigo-400 font-mono font-medium animate-pulse">
-                  Buraya bırakın
-                </span>
-              )}
-            </div>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {catServices.map((service) => {
+              {group.items.map((service) => {
                 const globalIndex = services.findIndex(s => s.id === service.id);
-                const isDragging = draggingServiceId === service.id;
+                const isDragging = draggingId === service.id;
 
                 return (
                   <div
@@ -298,71 +274,74 @@ export const ServicesPage: React.FC = () => {
                       {service.sslExpiryDays !== null && service.sslExpiryDays !== undefined && (
                         <div className="mt-2">
                           <span
-                            className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md border font-mono ${
+                            className={`inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full border ${
                               service.sslExpiryDays <= 7
-                                ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                                : service.sslExpiryDays <= 14
-                                ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                                : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                ? 'bg-rose-500/10 border-rose-500/30 text-rose-400 font-semibold'
+                                : service.sslExpiryDays <= 30
+                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                             }`}
+                            title={`Sertifika Sağlayıcı: ${service.sslIssuer || 'Bilinmiyor'}`}
                           >
                             <ShieldCheck className="w-3 h-3" />
-                            {t('services.sslRemaining', { days: service.sslExpiryDays })}
+                            <span>
+                              {t('services.sslRemaining', { days: service.sslExpiryDays })}
+                            </span>
                           </span>
                         </div>
                       )}
                     </div>
 
-                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-[#2a2e3f]/60">
-                      {/* Sıralama butonları (Roadmap 2.4) */}
+                    <div className="flex items-center justify-between border-t border-[#2a2e3f] pt-4 mt-4">
+                      {/* Sıralama Butonları (Yukarı / Aşağı) */}
                       <div className="flex items-center gap-1">
                         <button
+                          type="button"
                           onClick={() => handleMove(globalIndex, 'up')}
                           disabled={globalIndex === 0 || reordering}
-                          className="p-1 rounded bg-[#0f1117] border border-[#2a2e3f] text-[#9ca3af] hover:text-[#e5e7eb] hover:bg-[#1e2130] transition-colors disabled:opacity-30 cursor-pointer"
-                          title={t('services.moveUp')}
+                          className="p-1.5 rounded-lg bg-[#0f1117] border border-[#2a2e3f] text-[#9ca3af] hover:text-[#e5e7eb] hover:bg-[#1a1d29] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                          title="Yukarı Taşı"
                         >
                           <ArrowUp className="w-3 h-3" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => handleMove(globalIndex, 'down')}
                           disabled={globalIndex === services.length - 1 || reordering}
-                          className="p-1 rounded bg-[#0f1117] border border-[#2a2e3f] text-[#9ca3af] hover:text-[#e5e7eb] hover:bg-[#1e2130] transition-colors disabled:opacity-30 cursor-pointer"
-                          title={t('services.moveDown')}
+                          className="p-1.5 rounded-lg bg-[#0f1117] border border-[#2a2e3f] text-[#9ca3af] hover:text-[#e5e7eb] hover:bg-[#1a1d29] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                          title="Aşağı Taşı"
                         >
                           <ArrowDown className="w-3 h-3" />
                         </button>
                       </div>
 
                       <div className="flex items-center gap-2">
-                        {service.source === 'manual' && (
-                          <button
-                            onClick={() => handleDelete(service.id, service.name)}
-                            className="p-1.5 rounded-lg text-[#9ca3af] hover:text-[#ef4444] hover:bg-[#0f1117] transition-colors cursor-pointer"
-                            title={t('common.delete')}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-
                         {service.url && (
                           <a
                             href={formatServiceUrl(service.url)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-1 px-3 py-1 rounded-lg border border-[#2a2e3f] bg-[#0f1117] text-xs font-medium text-[#e5e7eb] hover:bg-[#d4d4d8] hover:text-[#0f1117] transition-colors"
+                            className="flex items-center gap-1 text-xs text-[#9ca3af] hover:text-[#e5e7eb] font-medium py-1 px-2 rounded-lg bg-[#0f1117] border border-[#2a2e3f] hover:border-[#3b4252] transition-colors"
                           >
-                            <span>Aç</span>
+                            <span>{t('dashboard.quickLaunch')}</span>
                             <ExternalLink className="w-3 h-3" />
                           </a>
                         )}
+
+                        <button
+                          onClick={() => handleDelete(service.id, service.name)}
+                          className="p-1.5 text-[#9ca3af] hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                          title={t('common.delete')}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
                   </div>
                 );
               })}
             </div>
-          </div>
+          </GroupSection>
         );
       })}
 
@@ -370,7 +349,10 @@ export const ServicesPage: React.FC = () => {
       <AddServiceModal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
-        onSuccess={loadServices}
+        onSuccess={async () => {
+          await loadServices();
+          setShowAddModal(false);
+        }}
       />
     </div>
   );

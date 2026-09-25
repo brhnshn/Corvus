@@ -88,12 +88,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
     );
   }
 
-  // Hesaplanan Genel Sağlık Durumu
-  const downServices = summary?.downServices ?? 0;
-  const degradedServices = summary?.degradedServices ?? 0;
-  const failedPushMonitors = pushMonitors.filter(p => p.status === 'down');
-  const stoppedContainers = containers.filter(c => c.State.toLowerCase() !== 'running');
-  const sslWarningCount = services.filter(
+  // İlk yükleme tamamlanmadan (loading=true) hesaplama yapma.
+  // containers/services henüz boş array olabilir — false alarm önlenir.
+  const downServices = loading ? 0 : (summary?.downServices ?? 0);
+  const degradedServices = loading ? 0 : (summary?.degradedServices ?? 0);
+  const failedPushMonitors = loading ? [] : pushMonitors.filter(p => p.status === 'down');
+  const stoppedContainers = loading ? [] : containers.filter(c => c.State.toLowerCase() !== 'running');
+  const sslWarningCount = loading ? 0 : services.filter(
     s => typeof s.sslExpiryDays === 'number' && s.sslExpiryDays <= 14 && s.sslExpiryDays >= 0
   ).length;
 
@@ -121,13 +122,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
         </div>
       )}
 
-      {/* 2. Dikkat Gerektirenler (Kesintiler, SSL Uyarıları ve Kaçan Cronlar) */}
-      <AttentionRequiredCard
-        services={services}
-        stoppedContainers={stoppedContainers}
-        failedPushMonitors={failedPushMonitors}
-        onNavigate={onNavigate}
-      />
+      {/* 2. Dikkat Gerektirenler — loading tamamlanana kadar render etme */}
+      {!loading && (
+        <AttentionRequiredCard
+          services={services}
+          stoppedContainers={stoppedContainers}
+          failedPushMonitors={failedPushMonitors}
+          onNavigate={onNavigate}
+        />
+      )}
 
       {/* 3. Kompakt Telemetri & Kaynak Kullanımı KPI Şeridi */}
       <SystemKpiStrip
@@ -135,13 +138,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
         metrics={summary?.latestMetrics}
       />
 
-      {/* 4. Hızlı Servis Başlatıcı (Homepage / Homarr Grid) */}
+      {/* 4. Hızlı Servis Başlatıcı */}
       <QuickServicesGrid
         services={services}
         onNavigate={onNavigate}
       />
 
-      {/* 5. Operasyonlar & Cron Takibi (Dead Man's Snitch ve Yedekleme) */}
+      {/* 5. Operasyonlar & Cron Takibi */}
       <OperationsWidget
         lastBackup={summary?.lastBackup}
         pushMonitors={pushMonitors}

@@ -11,6 +11,9 @@ interface ContainerListProps {
   actionInProgress: { id: string; action: string } | null;
   onAction: (action: 'start' | 'stop' | 'pause' | 'unpause' | 'restart', id: string, name: string) => void;
   onOpenLogs: (id: string, name: string) => void;
+  onDragStart?: (e: React.DragEvent, id: string) => void;
+  onDragEnd?: () => void;
+  draggingId?: string | null;
 }
 
 export const ContainerList: React.FC<ContainerListProps> = ({
@@ -18,7 +21,10 @@ export const ContainerList: React.FC<ContainerListProps> = ({
   statsMap,
   actionInProgress,
   onAction,
-  onOpenLogs
+  onOpenLogs,
+  onDragStart,
+  onDragEnd,
+  draggingId
 }) => {
   const { t } = useI18n();
 
@@ -32,9 +38,18 @@ export const ContainerList: React.FC<ContainerListProps> = ({
           const shortId = c.Id.slice(0, 12);
           const isRunning = c.State.toLowerCase() === 'running';
           const isPaused = c.State.toLowerCase() === 'paused';
+          const isDragging = draggingId === c.Id;
 
           return (
-            <div key={c.Id} className="p-4 rounded-xl bg-[#1a1d29] border border-[#2a2e3f] space-y-3">
+            <div 
+              key={c.Id} 
+              draggable={!!onDragStart}
+              onDragStart={(e) => onDragStart?.(e, c.Id)}
+              onDragEnd={onDragEnd}
+              className={`p-4 rounded-xl bg-[#1a1d29] border border-[#2a2e3f] space-y-3 transition-opacity ${
+                isDragging ? 'opacity-30 border-indigo-500/50' : ''
+              }`}
+            >
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <h3 className="font-semibold text-sm text-[#e5e7eb]">{cleanName}</h3>
@@ -60,7 +75,7 @@ export const ContainerList: React.FC<ContainerListProps> = ({
                 </div>
               )}
 
-              <div className="pt-2 border-t border-[#2a2e3f]/60 flex items-center justify-end">
+              <div className="pt-2 border-t border-[#2a2e3f]/60">
                 <ContainerActionButtons
                   container={c}
                   cleanName={cleanName}
@@ -96,9 +111,18 @@ export const ContainerList: React.FC<ContainerListProps> = ({
                 const shortId = c.Id.slice(0, 12);
                 const isRunning = c.State.toLowerCase() === 'running';
                 const isPaused = c.State.toLowerCase() === 'paused';
+                const isDragging = draggingId === c.Id;
 
                 return (
-                  <tr key={c.Id} className="hover:bg-[#1e2130]/50 transition-colors">
+                  <tr 
+                    key={c.Id} 
+                    draggable={!!onDragStart}
+                    onDragStart={(e) => onDragStart?.(e, c.Id)}
+                    onDragEnd={onDragEnd}
+                    className={`hover:bg-[#1e2130]/50 transition-colors ${
+                      onDragStart ? 'cursor-grab active:cursor-grabbing' : ''
+                    } ${isDragging ? 'opacity-30 bg-indigo-500/10' : ''}`}
+                  >
                     <td className="px-5 py-3.5">
                       <div className="font-medium text-[#e5e7eb]">{cleanName}</div>
                       <div className="text-xs font-mono text-[#9ca3af]">{shortId}</div>
@@ -130,17 +154,15 @@ export const ContainerList: React.FC<ContainerListProps> = ({
                     </td>
 
                     <td className="px-5 py-3.5 text-right">
-                      <div className="flex items-center justify-end">
-                        <ContainerActionButtons
-                          container={c}
-                          cleanName={cleanName}
-                          isRunning={isRunning}
-                          isPaused={isPaused}
-                          actionInProgress={actionInProgress}
-                          onAction={onAction}
-                          onOpenLogs={onOpenLogs}
-                        />
-                      </div>
+                      <ContainerActionButtons
+                        container={c}
+                        cleanName={cleanName}
+                        isRunning={isRunning}
+                        isPaused={isPaused}
+                        actionInProgress={actionInProgress}
+                        onAction={onAction}
+                        onOpenLogs={onOpenLogs}
+                      />
                     </td>
                   </tr>
                 );
