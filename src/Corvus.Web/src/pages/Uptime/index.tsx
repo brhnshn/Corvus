@@ -17,9 +17,12 @@ export const UptimePage: React.FC = () => {
   const [snitches, setSnitches] = useState<PushMonitor[]>([]);
   const [loadingSnitches, setLoadingSnitches] = useState(false);
 
-  const fetchServices = async () => {
+  const isMountedRef = React.useRef(true);
+
+  const fetchServices = React.useCallback(async () => {
     try {
       const data = await api.getServices();
+      if (!isMountedRef.current) return;
       setServices(data);
       if (data.length > 0) {
         setSelectedServiceId((prev) => {
@@ -30,46 +33,71 @@ export const UptimePage: React.FC = () => {
         setSelectedServiceId('');
       }
     } catch (err) {
-      console.error('Servisler yüklenemedi:', err);
+      if (isMountedRef.current) console.error('Servisler yüklenemedi:', err);
     }
-  };
+  }, []);
 
-  const fetchSnitches = async () => {
-    setLoadingSnitches(true);
+  const fetchSnitches = React.useCallback(async () => {
+    if (isMountedRef.current) setLoadingSnitches(true);
     try {
       const data = await api.getPushMonitors();
-      setSnitches(data);
+      if (isMountedRef.current) setSnitches(data);
     } catch (err) {
-      console.error('Push monitörleri yüklenemedi:', err);
+      if (isMountedRef.current) console.error('Push monitörleri yüklenemedi:', err);
     } finally {
-      setLoadingSnitches(false);
+      if (isMountedRef.current) setLoadingSnitches(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchServices();
-    fetchSnitches();
+    isMountedRef.current = true;
+    if (activeTab === 'uptime') {
+      fetchServices();
+    } else {
+      fetchSnitches();
+    }
 
     const interval = setInterval(() => {
-      if (!document.hidden) {
-        fetchServices();
-        fetchSnitches();
+      if (!document.hidden && isMountedRef.current) {
+        if (activeTab === 'uptime') {
+          fetchServices();
+        } else {
+          fetchSnitches();
+        }
       }
-    }, 15000);
+    }, 25000);
 
     const onVisible = () => {
-      if (!document.hidden) {
+      if (!document.hidden && isMountedRef.current) {
+        if (activeTab === 'uptime') {
+          fetchServices();
+        } else {
+          fetchSnitches();
+        }
+      }
+    };
+
+    const handleCorvusEvent = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const type: string | undefined = detail?.eventType || detail?.type;
+      if (!isMountedRef.current) return;
+      if (activeTab === 'uptime' && type?.includes('service')) {
         fetchServices();
+      } else if (activeTab === 'snitch' && (type?.includes('push') || type?.includes('snitch'))) {
         fetchSnitches();
       }
     };
+
     document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('corvus_event', handleCorvusEvent);
 
     return () => {
+      isMountedRef.current = false;
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('corvus_event', handleCorvusEvent);
     };
-  }, []);
+  }, [activeTab, fetchServices, fetchSnitches]);
 
   return (
     <div className="space-y-6">

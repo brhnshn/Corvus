@@ -46,19 +46,54 @@ export const ContainersPage: React.FC = () => {
   };
 
   useEffect(() => {
-    loadContainers();
+    let isMounted = true;
+
+    const safeLoadContainers = async () => {
+      try {
+        const data = await api.getContainers();
+        if (!isMounted) return;
+        setContainers(data);
+
+        const runningContainers = data.filter(c => c.State.toLowerCase() === 'running');
+        if (runningContainers.length === 0) return;
+        const summary = await api.getContainersStatsSummary();
+        if (!isMounted) return;
+        if (summary) {
+          setStatsMap(summary);
+        }
+      } catch (err) {
+        if (isMounted) console.error('Container listesi alınamadı', err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    safeLoadContainers();
+
     const interval = setInterval(() => {
-      if (!document.hidden) loadContainers();
-    }, 10000);
+      if (!document.hidden && isMounted) safeLoadContainers();
+    }, 25000);
 
     const onVisible = () => {
-      if (!document.hidden) loadContainers();
+      if (!document.hidden && isMounted) safeLoadContainers();
     };
+
+    const handleCorvusEvent = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const type: string | undefined = detail?.eventType || detail?.type;
+      if (type?.includes('container') && isMounted) {
+        safeLoadContainers();
+      }
+    };
+
     document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('corvus_event', handleCorvusEvent);
 
     return () => {
+      isMounted = false;
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('corvus_event', handleCorvusEvent);
     };
   }, []);
 

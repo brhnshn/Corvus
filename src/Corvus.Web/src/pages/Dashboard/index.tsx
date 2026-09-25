@@ -32,9 +32,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isMountedRef = React.useRef(true);
 
-  const loadData = async (isManualRefresh = false) => {
-    if (isManualRefresh) setRefreshing(true);
+  const loadData = React.useCallback(async (isManualRefresh = false) => {
+    if (isManualRefresh && isMountedRef.current) setRefreshing(true);
     try {
       const [sumData, srvData, pmData, verData, cntData] = await Promise.allSettled([
         api.getDashboardSummary(),
@@ -44,6 +45,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
         api.getContainers()
       ]);
 
+      if (!isMountedRef.current) return;
+
       if (sumData.status === 'fulfilled') setSummary(sumData.value);
       if (srvData.status === 'fulfilled') setServices(srvData.value);
       if (pmData.status === 'fulfilled') setPushMonitors(pmData.value);
@@ -52,38 +55,49 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
 
       setError(null);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Veriler yüklenemedi');
+      if (isMountedRef.current) setError(err instanceof Error ? err.message : 'Veriler yüklenemedi');
     } finally {
-      setLoading(false);
-      if (isManualRefresh) setRefreshing(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+        if (isManualRefresh) setRefreshing(false);
+      }
     }
-  };
+  }, []);
 
   useEffect(() => {
+    isMountedRef.current = true;
     loadData();
 
     // 30 saniyede bir arka planda güncelle (yalnızca sekme aktifken)
-    // SWR cache zaten arka planda fetch yapıyor; bu UI'ı yeniler
     const interval = setInterval(() => {
-      if (!document.hidden) loadData();
+      if (!document.hidden && isMountedRef.current) loadData();
     }, 30000);
 
     const onVisible = () => {
-      if (!document.hidden) loadData();
+      if (!document.hidden && isMountedRef.current) loadData();
     };
     const onOnline = () => {
-      loadData();
+      if (isMountedRef.current) loadData();
+    };
+
+    const handleCorvusEvent = () => {
+      if (isMountedRef.current && !document.hidden) {
+        loadData();
+      }
     };
 
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('online', onOnline);
+    window.addEventListener('corvus_event', handleCorvusEvent);
 
     return () => {
+      isMountedRef.current = false;
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('online', onOnline);
+      window.removeEventListener('corvus_event', handleCorvusEvent);
     };
-  }, []);
+  }, [loadData]);
 
   if (loading && !summary) {
     return (

@@ -27,40 +27,44 @@ export const PingUptimeTab: React.FC<PingUptimeTabProps> = ({
 
   const selectedService = services.find((s) => s.id === selectedServiceId) || services[0];
 
-  const loadChecks = async (serviceId: string, currentRange: string) => {
+  const isMountedRef = React.useRef(true);
+
+  const loadChecks = React.useCallback(async (serviceId: string, currentRange: string) => {
     if (!serviceId) {
-      setChecks([]);
+      if (isMountedRef.current) setChecks([]);
       return;
     }
-    setLoadingChecks(true);
+    if (isMountedRef.current) setLoadingChecks(true);
     try {
       const data = await api.getUptimeChecks(serviceId, currentRange);
-      setChecks(data);
+      if (isMountedRef.current) setChecks(data);
     } catch (err: unknown) {
-      console.error('Uptime kontrolleri yüklenemedi:', err);
+      if (isMountedRef.current) console.error('Uptime kontrolleri yüklenemedi:', err);
     } finally {
-      setLoadingChecks(false);
+      if (isMountedRef.current) setLoadingChecks(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    isMountedRef.current = true;
     if (selectedService?.id) {
       loadChecks(selectedService.id, range);
       const interval = setInterval(() => {
-        if (!document.hidden) loadChecks(selectedService.id, range);
-      }, 15000);
+        if (!document.hidden && isMountedRef.current) loadChecks(selectedService.id, range);
+      }, 30000);
 
       const onVisible = () => {
-        if (!document.hidden) loadChecks(selectedService.id, range);
+        if (!document.hidden && isMountedRef.current) loadChecks(selectedService.id, range);
       };
       document.addEventListener('visibilitychange', onVisible);
 
       return () => {
+        isMountedRef.current = false;
         clearInterval(interval);
         document.removeEventListener('visibilitychange', onVisible);
       };
     }
-  }, [selectedService?.id, range]);
+  }, [selectedService?.id, range, loadChecks]);
 
   if (services.length === 0) {
     return (

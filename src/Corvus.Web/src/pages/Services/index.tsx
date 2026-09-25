@@ -17,39 +17,54 @@ export const ServicesPage: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [reordering, setReordering] = useState(false);
 
-  const loadServices = async () => {
+  const isMountedRef = React.useRef(true);
+
+  const loadServices = React.useCallback(async () => {
     try {
       const data = await api.getServices();
-      setServices(data);
+      if (isMountedRef.current) setServices(data);
     } catch (err: unknown) {
-      console.error('Servisler yüklenemedi', err);
+      if (isMountedRef.current) console.error('Servisler yüklenemedi', err);
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    isMountedRef.current = true;
     loadServices();
+
     const interval = setInterval(() => {
-      if (!document.hidden) loadServices();
-    }, 10000);
+      if (!document.hidden && isMountedRef.current) loadServices();
+    }, 25000);
 
     const onVisible = () => {
-      if (!document.hidden) loadServices();
+      if (!document.hidden && isMountedRef.current) loadServices();
     };
     const onOnline = () => {
-      loadServices();
+      if (isMountedRef.current) loadServices();
+    };
+
+    const handleCorvusEvent = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const type: string | undefined = detail?.eventType || detail?.type;
+      if (type?.includes('service') && isMountedRef.current) {
+        loadServices();
+      }
     };
 
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('online', onOnline);
+    window.addEventListener('corvus_event', handleCorvusEvent);
 
     return () => {
+      isMountedRef.current = false;
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('online', onOnline);
+      window.removeEventListener('corvus_event', handleCorvusEvent);
     };
-  }, []);
+  }, [loadServices]);
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(t('services.deleteConfirm', { name }))) return;

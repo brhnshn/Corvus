@@ -13,33 +13,38 @@ export const SystemMetricsPage: React.FC = () => {
   const [range, setRange] = useState('24h');
   const [loading, setLoading] = useState(true);
 
-  const loadData = async () => {
+  const isMountedRef = React.useRef(true);
+
+  const loadData = React.useCallback(async () => {
     try {
       const data = await api.getSystemMetrics(range);
-      setMetrics(data);
+      if (isMountedRef.current) setMetrics(data);
     } catch (err) {
-      console.error('Metrikler yüklenemedi:', err);
+      if (isMountedRef.current) console.error('Metrikler yüklenemedi:', err);
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) setLoading(false);
     }
-  };
+  }, [range]);
 
   useEffect(() => {
+    isMountedRef.current = true;
     loadData();
+
     const interval = setInterval(() => {
-      if (!document.hidden) loadData();
-    }, 15000);
+      if (!document.hidden && isMountedRef.current) loadData();
+    }, 25000);
 
     const onVisible = () => {
-      if (!document.hidden) loadData();
+      if (!document.hidden && isMountedRef.current) loadData();
     };
     document.addEventListener('visibilitychange', onVisible);
 
     return () => {
+      isMountedRef.current = false;
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [range]);
+  }, [loadData]);
 
   const ranges = [
     { id: '1h', label: t('metrics.range1h') },
