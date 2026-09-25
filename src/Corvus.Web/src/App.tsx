@@ -109,6 +109,29 @@ export const App: React.FC = () => {
     };
   }, [isStatusPath]);
 
+  const getPageTitle = (page: PageId) => {
+    switch (page) {
+      case 'dashboard': return t('nav.dashboard');
+      case 'services': return t('nav.services');
+      case 'containers': return t('nav.containers');
+      case 'metrics': return t('nav.metrics');
+      case 'uptime': return t('nav.uptime');
+      case 'settings': return t('nav.settings');
+    }
+  };
+
+  // Sayfa ve dil değişimlerine göre dinamik tarayıcı sekme başlığı (document.title)
+  // Kurallar gereği tüm hook'lar erken dönüşlerden (return) önce çağrılmalıdır
+  useEffect(() => {
+    if (isStatusPath) {
+      document.title = `${t('publicStatus.badge')} - Corvus`;
+    } else if (authStatus && authStatus.authEnabled && !authStatus.isAuthenticated) {
+      document.title = `${t('auth.tabLogin')} - Corvus`;
+    } else {
+      document.title = `${getPageTitle(currentPage)} - Corvus`;
+    }
+  }, [currentPage, isStatusPath, authStatus, t]);
+
   // Roadmap 1.6: Halka Açık Şifresiz Durum Sayfası
   if (isStatusPath) {
     return (
@@ -187,28 +210,6 @@ export const App: React.FC = () => {
         return <DashboardPage />;
     }
   };
-
-  const getPageTitle = (page: PageId) => {
-    switch (page) {
-      case 'dashboard': return t('nav.dashboard');
-      case 'services': return t('nav.services');
-      case 'containers': return t('nav.containers');
-      case 'metrics': return t('nav.metrics');
-      case 'uptime': return t('nav.uptime');
-      case 'settings': return t('nav.settings');
-    }
-  };
-
-  // Sayfa ve dil değişimlerine göre dinamik tarayıcı sekme başlığı (document.title)
-  useEffect(() => {
-    if (isStatusPath) {
-      document.title = `${t('publicStatus.badge')} - Corvus`;
-    } else if (authStatus && authStatus.authEnabled && !authStatus.isAuthenticated) {
-      document.title = `${t('auth.tabLogin')} - Corvus`;
-    } else {
-      document.title = `${getPageTitle(currentPage)} - Corvus`;
-    }
-  }, [currentPage, isStatusPath, authStatus, t]);
 
   return (
     <div className="min-h-screen bg-[#0f1117] text-[#e5e7eb] flex flex-col lg:flex-row">
